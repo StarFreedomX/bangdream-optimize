@@ -290,6 +290,8 @@ test('Quick birthday cards use their fixed growth exception and skill ID 57',()=
  const gameCard={skillId:57,skill:5,skillRecord:game.skills[57]};
  assert.equal(cardSkillInfo(gameCard).short,'B');
  assert.equal(cardSkillInfo(gameCard).notation,'100B');
+ assert.deepEqual(cardSkillInfo(gameCard).extra,[]);
+ assert.ok(cardSkillInfo(gameCard).effects.includes('damage'));
 });
 
 test('SuiteMaster birthday skill ID survives import and uses the B label',()=>{

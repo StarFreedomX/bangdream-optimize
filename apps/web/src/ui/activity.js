@@ -1,5 +1,5 @@
 import {isSupportedEventType} from '../models/event.js';
-import { mountActivityLayout } from './activity-layout.js';
+import { mountActivityLayout } from './activity-layout.js?v=2';
 import { icon } from './shell.js';
 import { ptEvaluateLiveVariant, ptMaximizeLiveVariant } from '../models/player-settings.js?v=3';
 import { starIconUrls, assetImage } from '../assets/index.js';

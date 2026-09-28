@@ -89,7 +89,7 @@ import { cardModel } from './ui/cards/model.js';
 import { createCardDetails } from './ui/cards/presentation.js';
 import { createTeamEditor } from './ui/team-editor.js';
 import { createHeroes } from './ui/hero.js';
-import { createActivityUI } from './ui/activity.js';
+import { createActivityUI } from './ui/activity.js?v=2';
 import { createEquipmentUI } from './ui/equipment.js';
 import {installSelects} from './ui/select.js';
 

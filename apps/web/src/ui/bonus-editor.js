@@ -7,7 +7,7 @@ import {createCardCatalog,toggleSelectionScope} from './cards/catalog.js';
 import {allCardModels,cardModel} from './cards/model.js';
 import {imageSources} from './cards/images.js';
 import {allowedLiveVariants,ptEvaluateLiveVariant,ptMaximizeLiveVariant} from '../models/player-settings.js';
-import {bonusApplication} from './activity.js';
+import {bonusApplication} from './activity.js?v=2';
 
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn,cls='pb-link')=>{const b=el('button',cls,text);b.type='button';b.onclick=fn;return b;};
@@ -31,7 +31,9 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
  const batch=(parent,kind,repaint)=>{const bar=el('div','pb-batch'),label=el('label','','统一百分比 '),span=el('span'),input=numeric(20,()=>{},kind==='characters'?'角色统一加成百分比':'卡牌统一加成百分比');span.append(input,document.createTextNode('%'));label.append(span);bar.append(label,button('应用到已选'+(kind==='characters'?'角色':'卡牌'),()=>{if(!input.reportValidity())return;for(const entry of draft[kind])entry.percent=Number(input.value);repaint();}),el('small','','可在下方单独调整'));parent.append(bar);};
  const renderRates=()=>{rates.replaceChildren();for(const entry of draft.characters){const name=characters.find(c=>c.id===entry.characterId)?.name||`角色 ${entry.characterId}`,label=el('label','pb-character-rate'),span=el('span');label.title=name;label.append(assetImage(characterIconUrls(entry.characterId),'',name));span.append(numeric(entry.percent,v=>entry.percent=v,`${name}加成百分比`),document.createTextNode('%'));label.append(span);rates.append(label);}if(!draft.characters.length)rates.append(el('p','pb-help','尚未选择角色。'));};
  const controls=createFilterControls(charSection,{characters,getFilters:()=>filters,onChange:()=>{const prev=new Map(draft.characters.map(c=>[String(c.characterId),c]));draft.characters=[...filters.character].map(id=>prev.get(id)||{characterId:Number(id),percent:20});controls.update();renderRates();},hosts:{character:bands},actionHosts:{character:actions}});batch(charSection,'characters',renderRates);charSection.append(rates);renderRates();
- const membersSection=section('指定卡牌','cards',button('选择卡牌',pickCards)),members=el('div','pb-member-rates');batch(membersSection,'members',renderMembers);membersSection.append(members);
+ const membersSection=section('指定卡牌','cards',button('选择游戏／自定义卡牌',()=>pickCards())),members=el('div','pb-member-rates');
+ scene.after(membersSection);
+ batch(membersSection,'members',renderMembers);membersSection.append(members);
  function renderMembers(){
   members.replaceChildren();
   for(const entry of draft.members){
@@ -59,7 +61,7 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
  scene.onchange=e=>{if(!form.checkValidity()){form.reportValidity();type.value=draft.eventType;live.value=lives[draft.eventType]||allowedLiveVariants(draft.eventType,mode)[0];return;}if(e.target===type)draft.eventType=type.value;else if(e.target===live)lives[draft.eventType]=live.value;renderScene();};renderScene();
  function pickCards(){
   const picker=el('dialog','pb-dialog accepted-bonus-picker');
-  picker.innerHTML='<header class="pb-dialog-header"><h2>指定加成卡牌</h2><button type="button" class="pb-icon-button" aria-label="关闭加成卡牌选择">×</button></header><div class="card-source-tabs" role="tablist" aria-label="加成卡牌来源"><button type="button" role="tab" id="bonus-game-tab" aria-controls="bonus-card-list" aria-selected="true">游戏卡牌</button><button type="button" role="tab" id="bonus-custom-tab" aria-controls="bonus-card-list" aria-selected="false" tabindex="-1">自定义卡牌</button></div><p class="pb-bonus-source-note" hidden>停用的自定义卡牌不能参与计算，可在“我的卡牌 → 自定义卡牌”中启用。</p><div class="pb-scroll accepted-card-picker" id="bonus-card-list" role="tabpanel" aria-labelledby="bonus-game-tab"></div><footer class="pb-dialog-footer"><p></p><button type="button" data-all>全选筛选结果</button><button type="button" data-cancel>取消</button><button type="button" class="pb-primary">使用所选卡牌</button></footer>';
+  picker.innerHTML='<header class="pb-dialog-header"><h2>指定加成卡牌</h2><button type="button" class="pb-icon-button" aria-label="关闭加成卡牌选择">×</button></header><div class="card-source-tabs" role="tablist" aria-label="加成卡牌来源"><button type="button" role="tab" id="bonus-game-tab" aria-controls="bonus-card-list" aria-selected="true">游戏卡牌</button><button type="button" role="tab" id="bonus-custom-tab" aria-controls="bonus-card-list" aria-selected="false" tabindex="-1">自定义卡牌</button></div><p class="pb-bonus-source-note" hidden>停用的自定义卡牌不能参与计算，可在“我的卡牌 → 自定义卡牌”中启用。</p><div class="pb-scroll accepted-card-picker" id="bonus-card-list" role="tabpanel" aria-labelledby="bonus-game-tab"></div><footer class="pb-dialog-footer"><p></p><button type="button" class="pb-link" data-all>全选筛选结果</button><button type="button" class="pb-link" data-cancel>取消</button><button type="button" class="pb-primary">使用所选卡牌</button></footer>';
   let selected=new Set(draft.members.map(c=>c.situationId));
   let source=draft.members.some(c=>player.customCards?.[c.situationId])?'custom':'game';
   picker.setAttribute('aria-label','指定加成卡牌');root.append(picker);
@@ -79,7 +81,14 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
    source=next;
    for(const tab of tabs){const active=tab.id===`bonus-${next}-tab`;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;if(active&&focus)tab.focus();}
    picker.querySelector('[role=tabpanel]').setAttribute('aria-labelledby',`bonus-${next}-tab`);
-   picker.querySelector('.pb-bonus-source-note').hidden=next!=='custom';
+   const note=picker.querySelector('.pb-bonus-source-note');
+   note.hidden=next!=='custom';
+   if(next==='custom'){
+    const customCards=Object.values(getPlayer().customCards??{});
+    note.textContent=!customCards.length?'当前档案还没有自定义卡牌，可在“我的卡牌 → 自定义卡牌”中创建。'
+     :customCards.every(card=>!card.enabled)?'当前自定义卡牌均已停用，请先在“我的卡牌 → 自定义卡牌”中启用。'
+     :'停用的自定义卡牌不能参与计算，可在“我的卡牌 → 自定义卡牌”中启用。';
+   }
    catalog.refresh();update();
   };
   for(const tab of tabs){
@@ -89,7 +98,7 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
   selectSource(source);
   picker.querySelector('[data-all]').onclick=()=>{selected=toggleSelectionScope(selected,catalog.filteredIds());update();};
   picker.querySelector('.pb-icon-button').onclick=picker.querySelector('[data-cancel]').onclick=()=>picker.close();
-  picker.querySelector('.pb-primary').onclick=()=>{const prev=new Map(draft.members.map(c=>[c.situationId,c]));draft.members=[...selected].map(id=>prev.get(id)||{situationId:id,percent:20});renderMembers();picker.close();};
+  picker.querySelector('.pb-primary').onclick=()=>{const prev=new Map(draft.members.map(c=>[c.situationId,c]));draft.members=[...selected].map(id=>prev.get(id)||{situationId:id,percent:20});renderMembers();form.querySelector('.pb-dialog-footer p').textContent=`已选 ${selected.size} 张卡牌，点击“应用加成”保存`;picker.close();};
   picker.onclose=()=>{catalog.destroy();picker.remove();};picker.showModal();
  }
  form.onsubmit=e=>{e.preventDefault();if(getProfileId()!==profile||!form.reportValidity())return;const latest=getPlayer();latest.eventSongs[0]=structuredClone(latest.eventSongs[latest.currentEvent]||[]);latest.currentEvent=0;latest.eventOverrides[0]=draft;for(const key of ['ptEvaluate','ptMaximize'])latest[key].liveVariantByEventType={...latest[key].liveVariantByEventType,...lives};writePlayer(latest);renderForms(latest);dialog.close();};dialog.onclose=()=>dialog.remove();root.append(dialog);dialog.showModal();

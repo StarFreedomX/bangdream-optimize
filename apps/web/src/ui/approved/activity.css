@@ -990,7 +990,9 @@
 #aurora-soft-study .pb-selection-bar label{display:flex;align-items:center;gap:5px}
 #aurora-soft-study #bonus-card-picker .card-grid{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:13px 9px}
 #aurora-soft-study #bonus-card-picker .card-group{padding-top:6px}
-#aurora-soft-study #bonus-card-picker .card[aria-pressed=true] .art-wrap{box-shadow:0 0 0 2px #a96691}
+#aurora-soft-study .accepted-bonus-picker .catalog-card[data-pressed=true] .cp-art{outline:3px solid #a96691;outline-offset:2px;box-shadow:0 2px 8px #713d6840}
+#aurora-soft-study .accepted-bonus-picker .catalog-card[data-pressed=true] .cp-art::after{content:"✓";position:absolute;z-index:2;top:3px;right:3px;display:grid;place-items:center;width:20px;height:20px;border-radius:3px;background:#974570;color:#fff;font:700 13px/1 sans-serif}
+#aurora-soft-study .accepted-bonus-picker .catalog-card[data-pressed=true] .cp-mastery{top:max(25px,31%)}
 #aurora-soft-study #bonus-card-picker :is(.card,.card-art,.art-wrap){border-radius:2px}
 #aurora-soft-study .pb-selected-mark{position:absolute;top:3px;right:3px;display:grid;place-items:center;width:20px;height:20px;padding:2px;background:#974570d9;color:#fff;border-radius:3px}
 #aurora-soft-study .pb-selected-mark svg{width:16px;height:16px}

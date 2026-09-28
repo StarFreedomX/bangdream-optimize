@@ -48,7 +48,8 @@ export function cardSkillInfo(card){
  const extras=['judge','life','damage'].filter(t=>types.has(t));
  const names={judge:'判定',life:'回复',damage:'伤害'};
  if(extras.length){const extra=extras.map(t=>names[t]).join('／');category=scores.length?extra+' + '+category:extra;if(short==='分数')short=extra;}
- if(Number(id)===57){suffix='B';short='B';category='B 型 · 生日卡加分';}
+ const birthday=Number(id)===57;
+ if(birthday){suffix='B';short='B';category='B 型 · 生日卡加分';}
  const duration=atLevel(s.duration),once=atLevel(s.onceEffect?.onceEffectValue);
  const replacements=s.onceEffect?.onceEffectType?[once,duration]:[duration];
  const template=gameText(s.description,'技能资料缺失');
@@ -56,5 +57,5 @@ export function cardSkillInfo(card){
  const display=typeof unified==='number'?conditionalScore(base,unified,suffix,teamCards,
   s.activationEffect?.unificationActivateConditionBandId,s.activationEffect?.unificationActivateConditionType)
   :{score:value,value:value?`${value}%`:'—',notation:value?`${value}${suffix}`:''};
- return {id,short,category,...display,description,duration,effects:[...types],extra:extras};
+ return {id,short,category,...display,description,duration,effects:[...types],extra:birthday?[]:extras};
 }

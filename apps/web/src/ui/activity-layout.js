@@ -1,6 +1,6 @@
 import {designFragment} from './approved/templates.js';
 import {mountDesignControls,hydrateDesignIcons} from './design-controls.js';
-import {openBonusEditor} from './bonus-editor.js';
+import {openBonusEditor} from './bonus-editor.js?v=2';
 import { designIcon } from './fidelity.js';
 import { assetImage, attributeIconUrls, characterIconUrls, cardIconUrls } from '../assets/index.js';
 import { gameText } from './preferences.js';
