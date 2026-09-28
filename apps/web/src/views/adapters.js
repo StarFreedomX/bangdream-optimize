@@ -1,3 +1,6 @@
+import {cardModel} from '../ui/cards/model.js';
+import {imageSources} from '../ui/cards/images.js';
+
 export function createViewAdapters({
   elements,
   numericStringSort,
@@ -10,6 +13,7 @@ export function createViewAdapters({
   songCoverUrls,
   songLabel,
   getSongRecord,
+  getCore,
   cardLabel,
   cardName,
   cardRarity,
@@ -28,24 +32,31 @@ export function createViewAdapters({
   }
 
   function renderResultSummary(result, options) {
+    const player = options?.diagnostic?.player ?? readPlayer();
+    const customModels = new Map();
+    const customCard = cardId => {
+      if (!player.customCards?.[cardId]) return null;
+      if (!customModels.has(cardId)) customModels.set(cardId, cardModel(getCore(), player, cardId));
+      return customModels.get(cardId);
+    };
     renderResultSummaryView(elements.resultSummary, result, {
       selectedBandId,
       areaItemGroups,
       areaItemLabel,
       formatAreaItemRate,
-      player: options?.diagnostic?.player ?? readPlayer(),
+      player,
       songCoverUrls,
       songLabel,
       getSongRecord,
-      cardLabel,
-      cardName,
-      cardRarity,
-      cardCharacterId,
+      cardLabel: id => {const card=customCard(id);return card?`${card.title} · ${card.displayId}`:cardLabel(id);},
+      cardName: id => customCard(id)?.title ?? cardName(id),
+      cardRarity: id => customCard(id)?.rarity ?? cardRarity(id),
+      cardCharacterId: id => customCard(id)?.characterId ?? cardCharacterId(id),
       characterLabel,
       characterIconUrls,
-      cardConfig: (cardId) => {const player=options?.diagnostic?.player??readPlayer();return player.customCards?.[cardId]?.growth??normalizedCardConfig(cardId,player.cardList?.[cardId]);},
-      cardIconUrls,
-      cardAttribute,
+      cardConfig: id => player.customCards?.[id]?.growth ?? normalizedCardConfig(id,player.cardList?.[id]),
+      cardIconUrls: (id,config) => {const card=customCard(id);return card?imageSources(card):cardIconUrls(id,config);},
+      cardAttribute: id => customCard(id)?.attribute ?? cardAttribute(id),
       attributeFallback,
     }, options);
   }

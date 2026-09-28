@@ -69,12 +69,14 @@ export function isOwnedCard(card) {
 
 export function latestOwnedCard(cards) {
   const compare = comparator('release', 'desc', cardReleaseOrder(cards));
-  let latest = null;
+  let latest = null, customFallback = null;
   for (const card of cards) {
     if (Number(card.rarity) === 2 || !isOwnedCard(card)) continue;
-    if (!latest || compare(card, latest) < 0) latest = card;
+    if (card.custom) {
+      if (!customFallback || compare(card, customFallback) < 0) customFallback = card;
+    } else if (!latest || compare(card, latest) < 0) latest = card;
   }
-  return latest;
+  return latest || customFallback;
 }
 
 export function resolveCardCover(cards, _server, preference = {}) {
@@ -116,7 +118,7 @@ export function filterCards(cards, filters, search = '') {
     && filters.attribute.has(c.attribute)
     && filters.rarity.has(String(c.rarity))
     && filters.ownership.has(c.owned ? 'owned' : 'missing')
-    && (filters.server===null || [...filters.server].some(s => cardMatchesReleaseFilter(c,s,now)))
+    && (c.custom || filters.server===null || [...filters.server].some(s => cardMatchesReleaseFilter(c,s,now)))
     && (!term || normalize(c.id+' '+c.name+' '+c.title+' '+(c.searchText||'')).includes(term)));
 }
 

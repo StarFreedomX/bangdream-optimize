@@ -697,6 +697,7 @@ function renderScoreRangeTeam(cardIds, deps) {
     preview.append(resultSkillCard(cardId, {
       isCaptain: false,
       orderIndex: index,
+      teamCardIds: cardIds,
     }, deps));
   }
   if (!preview.childElementCount) {
@@ -871,6 +872,7 @@ function renderSkillOrder(song, deps, {
       preview.append(resultSkillCard(cardId, {
         isCaptain: cardId === song.captainCardId,
         orderIndex: showOrder ? index : undefined,
+        teamCardIds: song.teamCardIds ?? cardIds,
       }, deps));
     }
   }
@@ -884,7 +886,7 @@ function skillOrderCardIds(song) {
   return Array.isArray(cardIds) ? cardIds : [];
 }
 
-function resultSkillCard(cardId, { isCaptain, orderIndex }, deps) {
+function resultSkillCard(cardId, { isCaptain, orderIndex, teamCardIds }, deps) {
   let orderBadge;
   if (Number.isInteger(orderIndex)) {
     orderBadge = document.createElement('span');
@@ -906,6 +908,7 @@ function resultSkillCard(cardId, { isCaptain, orderIndex }, deps) {
     player: deps.player,
     captain: isCaptain,
     order: Number.isInteger(orderIndex) ? orderIndex + 1 : undefined,
+    teamCardIds,
   });
 }
 

@@ -116,5 +116,5 @@ export function createCardCatalog({root,getCards,getCharacters,getProfileId,getS
     const all=q('[data-scope-select]');if(all){all.dataset.complete=String(matched.length>0&&matched.every(c=>selected.has(c.id)));all.setAttribute('aria-pressed',all.dataset.complete);}
     for(const b of root.querySelectorAll('[data-group-select]')){b.dataset.complete=String(groups.find(g=>g.key===b.dataset.groupSelect)?.cards.every(c=>selected.has(c.id)));b.setAttribute('aria-pressed',b.dataset.complete);}
   }
-  return {refresh,paintSelection,filteredIds:()=>matched.map(c=>c.id),destroy(){observer?.disconnect();clearTimeout(timer);}};
+  return {refresh,paintSelection,filteredIds:()=>matched.filter(c=>!disabledReason(c)).map(c=>c.id),destroy(){observer?.disconnect();clearTimeout(timer);}};
 }

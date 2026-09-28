@@ -1,6 +1,7 @@
 import { cardBriefMarkup, bindCardBrief } from './presentation.js';
 
-export function createCardBrief(card,{captain=false,order,onOpen,onIllustrationChange}={}) {
+export function createCardBrief(card,{captain=false,order,teamCards,onOpen,onIllustrationChange}={}) {
+  if(teamCards)card={...card,skillTeamCards:teamCards};
   const item=document.createElement('article');item.className='cp-card';item.dataset.cpId=card.id;item.dataset.captain=String(captain);item.dataset.owned=String(card.owned);
   if(card.unknown){
     item.classList.add('cp-unknown');

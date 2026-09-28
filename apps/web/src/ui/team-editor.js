@@ -12,17 +12,18 @@ const btn=(text,fn,cls='')=>{const b=el('button',cls,text);b.type='button';b.onc
 export function createTeamEditor({getCore,getPlayer,getProfileId,writePlayer,onApply,importDraft,openDetails}) {
   let dialog,catalog,customPicker,draft,index,slot,profileId,trigger,original,busy=false,generation=0,activeTeamCount=1,onlyAvailable=false;
   const details=createCardDetails(),q=s=>dialog.querySelector(s),teams=()=>draft.ptEvaluate.teams.slice(0,activeTeamCount);
+  const teamCardModels=(team,player)=>Array.from({length:5},(_,at)=>team?.[at]?cardModel(getCore(),player,team[at]):null);
   function close(){generation++;busy=false;catalog?.destroy();dialog?.close();dialog?.remove();trigger?.focus({preventScroll:true});}
   function invalid(c){return teamChoiceReason(c,teams(),index,slot,id=>cardModel(getCore(),draft,id).characterId);}
   function changeTeam(value){if(busy)return;index=value;slot=Math.max(0,draft.ptEvaluate.teams[index].findIndex(id=>!id));refresh();}
   function refresh(){slots();catalog?.refresh();customPicker?.refresh();}
   function slots(){
-    const host=q('.pt-slots'),team=draft.ptEvaluate.teams[index];host.replaceChildren();
+    const host=q('.pt-slots'),team=draft.ptEvaluate.teams[index],teamCards=teamCardModels(team,draft);host.replaceChildren();
     const tabs=q('.pt-tabs');tabs.replaceChildren();tabs.hidden=activeTeamCount===1;
     for(let i=0;i<activeTeamCount;i++){const b=btn('',()=>changeTeam(i),'pt-tab');b.append(el('span','','第 '+(i+1)+' 队'),el('small','',draft.ptEvaluate.teams[i].filter(Boolean).length+' / 5'));b.setAttribute('aria-pressed',String(i===index));b.disabled=busy;tabs.append(b);}
     for(let at=0;at<5;at++){
-      const id=team[at],c=id?cardModel(getCore(),draft,id):null,choose=()=>{if(busy)return;slot=at;refresh();};let cell;
-      if(c&&!c.unknown){cell=createCardBrief(c,{captain:at===2,onOpen:choose});cell.classList.add('pt-card-slot');cell.dataset.active=String(slot===at);cell.querySelector('.cp-main').setAttribute('aria-pressed',String(slot===at));}
+      const id=team[at],c=teamCards[at],choose=()=>{if(busy)return;slot=at;refresh();};let cell;
+      if(c&&!c.unknown){cell=createCardBrief(c,{captain:at===2,teamCards,onOpen:choose});cell.classList.add('pt-card-slot');cell.dataset.active=String(slot===at);cell.querySelector('.cp-main').setAttribute('aria-pressed',String(slot===at));}
       else {cell=btn('',choose,'pt-slot');cell.dataset.captain=String(at===2);cell.setAttribute('aria-pressed',String(slot===at));cell.setAttribute('aria-label','卡位 '+(at+1)+(at===2?'，队长':'')+'，'+(id?'卡牌 '+id+' 资料暂缺':'待选择'));cell.append(el('span','pt-image pt-empty-slot','+'));const text=el('span');text.append(el('small','',at===2?'队长':'卡位 '+(at+1)),el('strong','',id?'#'+id+' · 资料暂缺':'待选择'));cell.append(text);}
       cell.dataset.slotIndex=at;host.append(cell);
     }
@@ -62,7 +63,7 @@ export function createTeamEditor({getCore,getPlayer,getProfileId,writePlayer,onA
     q('[data-team-close]').onclick=q('[data-team-cancel]').onclick=close;
     dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
     q('[data-team-save]').onclick=()=>{if(busy||q('[data-team-save]').disabled||profileId!==getProfileId())return;writePlayer(draft);onApply(draft);close();};
-    q('[data-team-detail]').onclick=()=>details.open(cardModel(getCore(),draft,draft.ptEvaluate.teams[index][slot]),{context:'队伍草稿'});
+    q('[data-team-detail]').onclick=()=>{const teamCards=teamCardModels(draft.ptEvaluate.teams[index],draft);details.open({...teamCards[slot],skillTeamCards:teamCards},{context:'队伍草稿'});};
     q('[data-team-captain]').onclick=()=>{const team=draft.ptEvaluate.teams[index];[team[slot],team[2]]=[team[2],team[slot]];slot=2;refresh();};
     q('[data-team-remove]').onclick=()=>{draft.ptEvaluate.teams[index][slot]=0;refresh();};
     q('[data-team-clear]').onclick=()=>{draft.ptEvaluate.teams[index].fill(0);slot=0;refresh();};
@@ -85,10 +86,10 @@ export function createTeamEditor({getCore,getPlayer,getProfileId,writePlayer,onA
     for(let ti=0;ti<(medley?3:1);ti++){
       const section=el('section','specified-team'),head=el('div','specified-team-header pt-team-heading');
       const title=el('h4','',medley?'第 '+(ti+1)+' 曲队伍':'指定队伍');title.append(el('small','',(selected[ti]?.filter(Boolean).length||0)+' / 5'));head.append(title);const edit=btn('编辑队伍',()=>open(ti,medley));edit.disabled=!active;head.append(edit);
-      const grid=el('div','specified-team-grid pt-summary-grid');
+      const grid=el('div','specified-team-grid pt-summary-grid'),teamCards=teamCardModels(selected[ti],player);
       for(let ci=0;ci<5;ci++){
         const id=selected[ti]?.[ci]||0;
-        if(id)grid.append(createCardBrief(cardModel(getCore(),player,id),{captain:ci===2,onOpen:openDetails}));
+        if(id)grid.append(createCardBrief(teamCards[ci],{captain:ci===2,teamCards,onOpen:openDetails}));
         else {const empty=btn(ci===2?'选择队长':'选择卡牌',()=>open(ti,medley,ci),'team-slot-empty');empty.disabled=!active;grid.append(empty);}
         const input=el('input','pt-evaluate-card-input');input.type='hidden';input.dataset.teamIndex=ti;input.dataset.cardIndex=ci;input.value=id||'';section.append(input);
       }

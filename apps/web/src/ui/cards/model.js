@@ -43,3 +43,10 @@ export function cardConfig(model) {
 export function catalogModels(core, player, profileId) {
   return [...new Set([...Object.keys(core?.cards||{}),...Object.keys(player?.cardList||{})])].map(id => cardModel(core,player,id,undefined,profileId));
 }
+
+export function allCardModels(core, player, profileId) {
+  return [
+    ...catalogModels(core, player, profileId),
+    ...Object.keys(player?.customCards ?? {}).map(id => cardModel(core, player, id)),
+  ];
+}

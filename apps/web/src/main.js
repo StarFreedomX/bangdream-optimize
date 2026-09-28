@@ -384,6 +384,7 @@ const {
   songCoverUrls,
   songLabel,
   getSongRecord: (songId) => state.core?.songs?.[String(songId)],
+  getCore: () => state.core,
   cardLabel,
   cardName,
   cardRarity,
@@ -557,9 +558,12 @@ const downloadActions = createDownloadActions({
 // Page views.
 const loadCardDetail = id => state.runtime.syncCardDetail(id);
 const readOnlyCardDetails = createCardDetails({loadCardDetail});
-configureCardPresentation(({id,config,player,captain,order}) => {
-  const card = cardModel(state.core, player ?? safeReadPlayer(), id, config, state.activePlayerProfileId);
-  return createCardBrief(card, {captain,order,onOpen:c=>readOnlyCardDetails.open(c,{context:config?'本次计算':'当前档案'})});
+configureCardPresentation(({id,config,player,captain,order,teamCardIds}) => {
+  const currentPlayer = player ?? safeReadPlayer();
+  const card = cardModel(state.core, currentPlayer, id, config, state.activePlayerProfileId);
+  const teamCards = Array.isArray(teamCardIds) ? teamCardIds.map(teamId => teamId
+    ? cardModel(state.core, currentPlayer, teamId, undefined, state.activePlayerProfileId) : null) : undefined;
+  return createCardBrief(card, {captain,order,teamCards,onOpen:c=>readOnlyCardDetails.open(c,{context:config?'本次计算':'当前档案'})});
 });
 const cardView = createCardView({
   loadCardDetail,

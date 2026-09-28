@@ -4,7 +4,8 @@ import {designIcon} from './fidelity.js';
 import {attributeNames} from './cards/rules.js';
 import {createFilterControls} from './cards/filters.js';
 import {createCardCatalog,toggleSelectionScope} from './cards/catalog.js';
-import {catalogModels} from './cards/model.js';
+import {allCardModels,cardModel} from './cards/model.js';
+import {imageSources} from './cards/images.js';
 import {allowedLiveVariants,ptEvaluateLiveVariant,ptMaximizeLiveVariant} from '../models/player-settings.js';
 import {bonusApplication} from './activity.js';
 
@@ -31,7 +32,24 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
  const renderRates=()=>{rates.replaceChildren();for(const entry of draft.characters){const name=characters.find(c=>c.id===entry.characterId)?.name||`角色 ${entry.characterId}`,label=el('label','pb-character-rate'),span=el('span');label.title=name;label.append(assetImage(characterIconUrls(entry.characterId),'',name));span.append(numeric(entry.percent,v=>entry.percent=v,`${name}加成百分比`),document.createTextNode('%'));label.append(span);rates.append(label);}if(!draft.characters.length)rates.append(el('p','pb-help','尚未选择角色。'));};
  const controls=createFilterControls(charSection,{characters,getFilters:()=>filters,onChange:()=>{const prev=new Map(draft.characters.map(c=>[String(c.characterId),c]));draft.characters=[...filters.character].map(id=>prev.get(id)||{characterId:Number(id),percent:20});controls.update();renderRates();},hosts:{character:bands},actionHosts:{character:actions}});batch(charSection,'characters',renderRates);charSection.append(rates);renderRates();
  const membersSection=section('指定卡牌','cards',button('选择卡牌',pickCards)),members=el('div','pb-member-rates');batch(membersSection,'members',renderMembers);membersSection.append(members);
- function renderMembers(){members.replaceChildren();for(const entry of draft.members){const card=getCore().cards[entry.situationId],row=el('div','pb-member-rate'),info=el('div'),name=gameText(card?.prefix,`卡牌 ${entry.situationId}`);row.append(assetImage(cardIconUrls({cardId:entry.situationId,card,illustTrainingStatus:true}),'pb-card-art',name));info.append(el('span','pb-member-name',`${name} · #${entry.situationId}`));const field=el('label');field.append(numeric(entry.percent,v=>entry.percent=v,`${entry.situationId} 加成百分比`),document.createTextNode('%'));info.append(field);row.append(info,button('×',()=>{draft.members=draft.members.filter(c=>c!==entry);renderMembers();},'pb-icon-button'));row.querySelector('button').setAttribute('aria-label','移除加成卡牌 '+entry.situationId);members.append(row);}if(!draft.members.length)members.append(el('p','pb-help','未设置。可以从卡牌库选择加成对象。'));}renderMembers();
+ function renderMembers(){
+  members.replaceChildren();
+  for(const entry of draft.members){
+   const card=cardModel(getCore(),getPlayer(),entry.situationId,undefined,profile);
+   const row=el('div','pb-member-rate'),info=el('div');
+   const id=card.displayId||`#${entry.situationId}`;
+   const name=card.title;
+   const art=assetImage(card.custom?imageSources(card):cardIconUrls({cardId:card.id,card:card.record,illustTrainingStatus:true}),'pb-card-art',name);
+   if(art)row.append(art);
+   info.append(el('span','pb-member-name',`${name} · ${id}`));
+   const field=el('label');field.append(numeric(entry.percent,v=>entry.percent=v,`${id} 加成百分比`),document.createTextNode('%'));
+   info.append(field);
+   row.append(info,button('×',()=>{draft.members=draft.members.filter(c=>c!==entry);renderMembers();},'pb-icon-button'));
+   row.querySelector('button').setAttribute('aria-label','移除加成卡牌 '+id);
+   members.append(row);
+  }
+  if(!draft.members.length)members.append(el('p','pb-help','未设置。可以从卡牌库选择加成对象。'));
+ }renderMembers();
  const match=section('属性与角色同时匹配','target'),help=el('p','pb-help'),fields=el('div','pb-match-fields');match.append(help,fields);
  draft.eventAttributeAndCharacterBonus??={};draft.eventCharacterParameterBonus??={};
  const limit=el('details','pb-editor-section pb-limit-editor');limit.innerHTML='<summary>突破加成 <span>展开调整各稀有度的 0–4 阶</span></summary>';const matrix=el('div','mastery-matrix'),matrixHead=el('div','mastery-row');matrixHead.append(el('span'));for(let rank=0;rank<=4;rank++)matrixHead.append(el('span','',`突破 ${rank}`));matrix.append(matrixHead);for(let rarity=5;rarity>=1;rarity--){const row=el('div','mastery-row');row.append(assetImage(starIconUrls(rarity),'',`${rarity} 星`));for(let rank=0;rank<=4;rank++)row.append(numeric(draft.limitBreaks?.find(r=>r.rarity===rarity&&r.rank===rank)?.percent,v=>{draft.limitBreaks=(draft.limitBreaks||[]).filter(r=>r.rarity!==rarity||r.rank!==rank);draft.limitBreaks.push({rarity,rank,percent:v});},`${rarity} 星突破 ${rank} 加成`));matrix.append(row);}limit.append(matrix);body.append(limit);
@@ -40,7 +58,39 @@ export function openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,wr
  }
  scene.onchange=e=>{if(!form.checkValidity()){form.reportValidity();type.value=draft.eventType;live.value=lives[draft.eventType]||allowedLiveVariants(draft.eventType,mode)[0];return;}if(e.target===type)draft.eventType=type.value;else if(e.target===live)lives[draft.eventType]=live.value;renderScene();};renderScene();
  function pickCards(){
-  const picker=el('dialog','pb-dialog accepted-bonus-picker');picker.innerHTML='<header class="pb-dialog-header"><h2>指定加成卡牌</h2><button type="button" class="pb-icon-button" aria-label="关闭加成卡牌选择">×</button></header><div class="pb-scroll accepted-card-picker"></div><footer class="pb-dialog-footer"><p></p><button type="button" data-all>全选筛选结果</button><button type="button" data-cancel>取消</button><button type="button" class="pb-primary">使用所选卡牌</button></footer>';let selected=new Set(draft.members.map(c=>c.situationId));picker.setAttribute('aria-label','指定加成卡牌');root.append(picker);let catalog;const update=()=>{catalog.paintSelection();picker.querySelector('footer p').textContent=`已选 ${selected.size} 张`;};catalog=createCardCatalog({root:picker.querySelector('.pb-scroll'),selectionMode:'bonus',getCards:()=>catalogModels(getCore(),getPlayer(),profile),getCharacters:()=>characters,getProfileId:()=>profile,getServer:()=>getPlayer().server,onPick:c=>{selected.has(c.id)?selected.delete(c.id):selected.add(c.id);update();},selectedIds:()=>[...selected]});catalog.refresh();update();picker.querySelector('[data-all]').onclick=()=>{selected=toggleSelectionScope(selected,catalog.filteredIds());update();};picker.querySelector('.pb-icon-button').onclick=picker.querySelector('[data-cancel]').onclick=()=>picker.close();picker.querySelector('.pb-primary').onclick=()=>{const prev=new Map(draft.members.map(c=>[c.situationId,c]));draft.members=[...selected].map(id=>prev.get(id)||{situationId:id,percent:20});renderMembers();picker.close();};picker.onclose=()=>{catalog.destroy();picker.remove();};picker.showModal();
+  const picker=el('dialog','pb-dialog accepted-bonus-picker');
+  picker.innerHTML='<header class="pb-dialog-header"><h2>指定加成卡牌</h2><button type="button" class="pb-icon-button" aria-label="关闭加成卡牌选择">×</button></header><div class="card-source-tabs" role="tablist" aria-label="加成卡牌来源"><button type="button" role="tab" id="bonus-game-tab" aria-controls="bonus-card-list" aria-selected="true">游戏卡牌</button><button type="button" role="tab" id="bonus-custom-tab" aria-controls="bonus-card-list" aria-selected="false" tabindex="-1">自定义卡牌</button></div><p class="pb-bonus-source-note" hidden>停用的自定义卡牌不能参与计算，可在“我的卡牌 → 自定义卡牌”中启用。</p><div class="pb-scroll accepted-card-picker" id="bonus-card-list" role="tabpanel" aria-labelledby="bonus-game-tab"></div><footer class="pb-dialog-footer"><p></p><button type="button" data-all>全选筛选结果</button><button type="button" data-cancel>取消</button><button type="button" class="pb-primary">使用所选卡牌</button></footer>';
+  let selected=new Set(draft.members.map(c=>c.situationId));
+  let source=draft.members.some(c=>player.customCards?.[c.situationId])?'custom':'game';
+  picker.setAttribute('aria-label','指定加成卡牌');root.append(picker);
+  let catalog;
+  const update=()=>{catalog.paintSelection();picker.querySelector('footer p').textContent=`已选 ${selected.size} 张`;};
+  catalog=createCardCatalog({
+   root:picker.querySelector('.pb-scroll'),selectionMode:'bonus',
+   getCards:()=>allCardModels(getCore(),getPlayer(),profile),
+   getCharacters:()=>characters,getProfileId:()=>profile,getServer:()=>getPlayer().server,
+   candidateFilter:c=>source==='custom'?c.custom:!c.custom,
+   disabledReason:c=>c.custom&&!c.enabled?'此自定义卡牌已停用，启用后才能参与计算':'',
+   onPick:c=>{selected.has(c.id)?selected.delete(c.id):selected.add(c.id);update();},
+   selectedIds:()=>[...selected],
+  });
+  const tabs=[...picker.querySelectorAll('[role=tab]')];
+  const selectSource=(next,focus=false)=>{
+   source=next;
+   for(const tab of tabs){const active=tab.id===`bonus-${next}-tab`;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;if(active&&focus)tab.focus();}
+   picker.querySelector('[role=tabpanel]').setAttribute('aria-labelledby',`bonus-${next}-tab`);
+   picker.querySelector('.pb-bonus-source-note').hidden=next!=='custom';
+   catalog.refresh();update();
+  };
+  for(const tab of tabs){
+   tab.onclick=()=>selectSource(tab.id==='bonus-custom-tab'?'custom':'game');
+   tab.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();selectSource(e.key==='Home'?'game':e.key==='End'?'custom':source==='game'?'custom':'game',true);};
+  }
+  selectSource(source);
+  picker.querySelector('[data-all]').onclick=()=>{selected=toggleSelectionScope(selected,catalog.filteredIds());update();};
+  picker.querySelector('.pb-icon-button').onclick=picker.querySelector('[data-cancel]').onclick=()=>picker.close();
+  picker.querySelector('.pb-primary').onclick=()=>{const prev=new Map(draft.members.map(c=>[c.situationId,c]));draft.members=[...selected].map(id=>prev.get(id)||{situationId:id,percent:20});renderMembers();picker.close();};
+  picker.onclose=()=>{catalog.destroy();picker.remove();};picker.showModal();
  }
  form.onsubmit=e=>{e.preventDefault();if(getProfileId()!==profile||!form.reportValidity())return;const latest=getPlayer();latest.eventSongs[0]=structuredClone(latest.eventSongs[latest.currentEvent]||[]);latest.currentEvent=0;latest.eventOverrides[0]=draft;for(const key of ['ptEvaluate','ptMaximize'])latest[key].liveVariantByEventType={...latest[key].liveVariantByEventType,...lives};writePlayer(latest);renderForms(latest);dialog.close();};dialog.onclose=()=>dialog.remove();root.append(dialog);dialog.showModal();
 }

@@ -27,6 +27,34 @@ const isObject = value => value && typeof value === 'object' && !Array.isArray(v
 export const isCustomCardId = id => Number.isInteger(Number(id)) && Number(id) > CUSTOM_CARD_ID_BASE && Number(id) <= CUSTOM_CARD_ID_MAX;
 export const customCardLabel = id => `C-${String(Number(id) - CUSTOM_CARD_ID_BASE).padStart(3, '0')}`;
 
+export function customCardReferences(player, cardId) {
+  const matches = value => Number(value) === Number(cardId);
+  const teamSlots = (player?.ptEvaluate?.teams ?? []).reduce((count, team) =>
+    count + (Array.isArray(team) ? team.filter(matches).length : 0), 0);
+  let eventBonuses = 0;
+  for (const events of [player?.eventOverrides, player?.eventPresets]) {
+    for (const event of Object.values(events ?? {})) {
+      if (Array.isArray(event?.members)) eventBonuses += event.members.filter(member => matches(member?.situationId ?? member?.cardId)).length;
+    }
+  }
+  return {teamSlots, eventBonuses};
+}
+
+export function removeCustomCardReferences(player, cardId) {
+  const references = customCardReferences(player, cardId);
+  const matches = value => Number(value) === Number(cardId);
+  for (const team of player?.ptEvaluate?.teams ?? []) {
+    if (!Array.isArray(team)) continue;
+    for (let slot = 0; slot < team.length; slot++) if (matches(team[slot])) team[slot] = 0;
+  }
+  for (const events of [player?.eventOverrides, player?.eventPresets]) {
+    for (const event of Object.values(events ?? {})) {
+      if (Array.isArray(event?.members)) event.members = event.members.filter(member => !matches(member?.situationId ?? member?.cardId));
+    }
+  }
+  return references;
+}
+
 export function validateCustomCard(entry, id) {
   const fail = message => { throw new Error(`自定义卡牌 ${id}：${message}`); };
   const integer = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
@@ -49,7 +77,7 @@ export function validateCustomCard(entry, id) {
   if (u.unificationActivateConditionType != null && !attrs.includes(u.unificationActivateConditionType)) fail('技能属性条件无效');
   if (entry.editor != null) {
     const e = entry.editor;
-    if (!isObject(e) || ['name','image','notes','skillType'].some(k => e[k] != null && typeof e[k] !== 'string') || (e.fixed != null && typeof e.fixed !== 'boolean') || (e.updated != null && !finite(e.updated, 0, Number.MAX_SAFE_INTEGER)) || (e.lowerScore != null && !finite(e.lowerScore, 0, 1000))) fail('编辑资料格式无效');
+    if (!isObject(e) || ['name','image','notes','skillType'].some(k => e[k] != null && typeof e[k] !== 'string') || (e.fixed != null && typeof e.fixed !== 'boolean') || (e.updated != null && !finite(e.updated, 0, Number.MAX_SAFE_INTEGER)) || (e.lowerScore != null && !finite(e.lowerScore, 0, 1000)) || (e.sourceSituationId != null && !integer(e.sourceSituationId, 1, 0xffffffff)) || (e.sourceSkillId != null && !integer(e.sourceSkillId, 1, 0xffffffff)) || (e.sourceQuick != null && (!isObject(e.sourceQuick) || !['quick','quick-master'].includes(e.sourceQuick.variant)))) fail('编辑资料格式无效');
   }
   return entry;
 }
@@ -84,13 +112,16 @@ export function customCardEntry(draft, core, {id, uid = globalThis.crypto.random
     if (Number(draft.conditionBand)) scoreUp.unificationActivateConditionBandId = Number(draft.conditionBand);
     if (draft.conditionAttribute !== 'none') scoreUp.unificationActivateConditionType = draft.conditionAttribute.toLowerCase();
   }
+  const sourceSkillLevel = Number(draft.skillLevel) || 5;
+  const keepSourceDurations = !!draft.sourceSituationId && Array.isArray(draft.durations) && draft.durations.length === 5
+    && Number(draft.duration) === Number(draft.durations[sourceSkillLevel - 1]);
   const entry = {uid, enabled: draft.enabled !== false,
     definition: {cardId:id,characterId:Number(draft.character),bandId:Number(character.bandId),rarity:Number(draft.rarity),attribute:draft.attribute.toLowerCase(),
       levelStats: a ? Object.fromEntries(a.levels.map(r => [r.level, stat(r.stats)])) : {60:stat(draft.stats)},
       trainingStat: a ? stat(a.bonuses[0].stats) : {...zero},episodeStats:a ? a.bonuses.slice(1).map(b => stat(b.stats)) : [{...zero},{...zero}],
-      skill:{durations:draft.duration !== undefined ? Array(5).fill(Number(draft.duration)) : draft.durations.map(Number),scoreUp,rateup:draft.skillType === 'rateup'}},
-    growth:{level:a ? Number(a.current) : 60,training:a ? a.bonuses[0].enabled : true,episodes:a ? a.bonuses.slice(1).map(b=>b.enabled) : [true,true],limitBreakRank:Number(draft.mastery),skillLevel:draft.duration !== undefined ? 5 : Number(draft.skillLevel),illustTrainingStatus:true},
-    editor:{name:String(draft.name).trim().slice(0,48),image:safeCustomImage(draft.image),notes:String(draft.notes || '').slice(0,240),skillType:draft.skillType,lowerScore:Number(draft.lowerScore)||0,fixed:!a,updated:Number(draft.updated)||Date.now()}};
+      skill:{durations:keepSourceDurations ? draft.durations.map(Number) : draft.duration !== undefined ? Array(5).fill(Number(draft.duration)) : draft.durations.map(Number),scoreUp,rateup:draft.skillType === 'rateup'}},
+    growth:{level:a ? Number(a.current) : 60,training:a ? a.bonuses[0].enabled : true,episodes:a ? a.bonuses.slice(1).map(b=>b.enabled) : [true,true],limitBreakRank:Number(draft.mastery),skillLevel:keepSourceDurations ? sourceSkillLevel : draft.duration !== undefined ? 5 : Number(draft.skillLevel),illustTrainingStatus:true},
+    editor:{name:String(draft.name).trim().slice(0,48),image:safeCustomImage(draft.image),notes:String(draft.notes || '').slice(0,240),skillType:draft.skillType,lowerScore:Number(draft.lowerScore)||0,fixed:!a,updated:Number(draft.updated)||Date.now(),...(draft.sourceSituationId ? {sourceSituationId:Number(draft.sourceSituationId)} : {}),...(draft.sourceSkillId ? {sourceSkillId:Number(draft.sourceSkillId)} : {}),...(draft.sourceQuick ? {sourceQuick:clone(draft.sourceQuick)} : {})}};
   return validateCustomCard(entry, id);
 }
 
@@ -100,7 +131,8 @@ export function customCardDraft(entry) {
     stats:vector(d.levelStats[g.level]),mastery:g.limitBreakRank,skillType:d.skill.rateup?'rateup':s.unificationActivateEffectValue!=null?'unified':['score','perfect','great'].includes(e.skillType)?e.skillType:'score',
     duration:d.skill.durations[g.skillLevel-1],score:percent(s.default),unifiedScore:percent(s.unificationActivateEffectValue??s.default),lowerScore:e.lowerScore??0,
     conditionBand:s.unificationActivateConditionBandId??0,conditionAttribute:s.unificationActivateConditionType? s.unificationActivateConditionType[0].toUpperCase()+s.unificationActivateConditionType.slice(1):'none',
-    image:safeCustomImage(e.image),notes:e.notes||'',updated:e.updated||0,
+    image:safeCustomImage(e.image),notes:e.notes||'',updated:e.updated||0,sourceSituationId:e.sourceSituationId,sourceSkillId:e.sourceSkillId,sourceQuick:e.sourceQuick ? clone(e.sourceQuick) : undefined,
+    ...(e.sourceSituationId ? {durations:[...d.skill.durations],skillLevel:g.skillLevel} : {}),
     advanced:e.fixed?null:{current:g.level,levels:Object.entries(d.levelStats).map(([level,v])=>({level:Number(level),stats:vector(v)})),bonuses:[d.trainingStat,...d.episodeStats].map((v,i)=>({stats:vector(v),enabled:i===0?g.training:g.episodes[i-1]}))}};
 }
 
