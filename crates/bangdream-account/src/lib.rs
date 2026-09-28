@@ -601,7 +601,13 @@ fn load_card_episode_ids(cards_dir: &Path, card_id: u64) -> Option<[u64; 2]> {
     let entries = card.episodes?.entries;
     let standard = entries
         .iter()
-        .find(|episode| episode.situation_id == card_id && episode.episode_type == "standard")?
+        .find(|episode| episode.situation_id == card_id && episode.episode_type == "standard")
+        // Kirameki Festival cards use an animation episode in the first slot.
+        .or_else(|| {
+            entries.iter().find(|episode| {
+                episode.situation_id == card_id && episode.episode_type == "animation"
+            })
+        })?
         .episode_id;
     let memorial = entries
         .iter()
@@ -1124,6 +1130,40 @@ mod tests {
         assert_eq!(importer.episode_ids_for_card(2055), Some([3321, 3322]));
 
         fs::remove_file(cards_dir.join("2055.json")).unwrap();
+        fs::remove_dir(cards_dir).unwrap();
+    }
+
+    #[test]
+    fn kirafes_memorial_read_state_uses_its_episode_id() {
+        let cards_dir =
+            std::env::temp_dir().join(format!("bangdream-account-kirafes-{}", request_id()));
+        fs::create_dir_all(&cards_dir).unwrap();
+        fs::write(
+            cards_dir.join("1329.json"),
+            r#"{"episodes":{"entries":[
+                {"episodeId":2175,"episodeType":"animation","situationId":1329},
+                {"episodeId":2176,"episodeType":"memorial","situationId":1329}
+            ]}}"#,
+        )
+        .unwrap();
+        let ids = load_card_episode_ids(&cards_dir, 1329);
+        assert_eq!(ids, Some([2175, 2176]));
+
+        for (read_ids, expected) in [
+            (vec![(2176, "already_read")], true),
+            (vec![(2176, "not_read")], false),
+        ] {
+            let mut payload = Vec::new();
+            push_bytes_field(&mut payload, 3, &user_situation_map_payload(1329, 850));
+            push_bytes_field(&mut payload, 16, &user_episode_map_payload(&read_ids));
+            let player = suite_user_to_player_config(1008159056, &payload, |card_id| {
+                (card_id == 1329).then_some(ids.unwrap())
+            })
+            .unwrap();
+            assert_eq!(player.card_list["1329"].episodes[1], expected);
+        }
+
+        fs::remove_file(cards_dir.join("1329.json")).unwrap();
         fs::remove_dir(cards_dir).unwrap();
     }
 
