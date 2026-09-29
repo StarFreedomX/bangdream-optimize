@@ -80,8 +80,12 @@ pub(crate) fn same_shape_contribution_active_indices(
     signature: MedleyPruneSignature,
     required_cover: usize,
     replacement_values: Option<&[u64]>,
+    preserve_stat: bool,
 ) -> Vec<usize> {
     let mut dominance = MedleyContributionDominance::new(cards, charts, profiles, 0);
+    if preserve_stat {
+        dominance.require_non_decreasing_stat();
+    }
     same_shape_contribution_active_indices_with_dominance(
         cards,
         signature,
@@ -101,8 +105,12 @@ pub(crate) fn same_shape_contribution_active_indices_with_joint_point_bonus(
     card_bonus_micros: &[u64],
     teammate_bonus_bounds: [u64; 2],
     fixed_score_equivalent: f64,
+    preserve_stat: bool,
 ) -> Vec<usize> {
     let mut dominance = MedleyContributionDominance::new(cards, charts, profiles, 0);
+    if preserve_stat {
+        dominance.require_non_decreasing_stat();
+    }
     dominance.set_joint_point_bonus_context(
         card_bonus_micros,
         teammate_bonus_bounds,
@@ -129,8 +137,12 @@ pub(crate) fn same_shape_contribution_active_indices_with_fixed_teammate_skills(
     teammate_effective_stat: f64,
     teammate_bonus_bounds: Option<[u64; 2]>,
     fixed_score_equivalent: f64,
+    preserve_stat: bool,
 ) -> Vec<usize> {
     let mut dominance = MedleyContributionDominance::new(cards, charts, profiles, 0);
+    if preserve_stat {
+        dominance.require_non_decreasing_stat();
+    }
     dominance.set_fixed_teammate_context(teammate_skills, teammate_effective_stat);
     if let (Some(card_bonus_micros), Some(teammate_bonus_bounds)) =
         (replacement_values, teammate_bonus_bounds)
@@ -570,6 +582,7 @@ pub(crate) struct MedleyContributionDominance<'a> {
     seed_score_floor_by_chart: Vec<f64>,
     fixed_teammate_skills: Option<[TeamCardSkill; 4]>,
     fixed_teammate_effective_stat: f64,
+    preserve_stat: bool,
     joint_point_bonus: Option<JointPointBonusContext<'a>>,
     signature_context_cache: Vec<SignatureContributionContextCacheEntry>,
     queued_model_cache: Vec<(MedleyPruneSignature, Arc<QueuedModels>)>,
@@ -711,6 +724,7 @@ struct ContributionReplacementComparison {
 enum ContributionReplacementReason {
     SameCard,
     Signature,
+    Stat,
     StrictDominance,
     Score,
     MissingBounds,
@@ -722,6 +736,7 @@ impl ContributionReplacementReason {
         match self {
             Self::SameCard => "sameCard",
             Self::Signature => "signature",
+            Self::Stat => "stat",
             Self::StrictDominance => "strictDominance",
             Self::Score => "score",
             Self::MissingBounds => "missingBounds",
@@ -769,6 +784,7 @@ impl<'a> MedleyContributionDominance<'a> {
             ),
             fixed_teammate_skills: None,
             fixed_teammate_effective_stat: 0.0,
+            preserve_stat: false,
             joint_point_bonus: None,
             signature_context_cache: Vec::new(),
             queued_model_cache: Vec::new(),
@@ -794,6 +810,7 @@ impl<'a> MedleyContributionDominance<'a> {
             ),
             fixed_teammate_skills: None,
             fixed_teammate_effective_stat: 0.0,
+            preserve_stat: false,
             joint_point_bonus: None,
             signature_context_cache: Vec::new(),
             queued_model_cache: Vec::new(),
@@ -809,6 +826,10 @@ impl<'a> MedleyContributionDominance<'a> {
         self.fixed_teammate_effective_stat = teammate_effective_stat;
         self.signature_context_cache.clear();
         self.queued_model_cache.clear();
+    }
+
+    pub(crate) fn require_non_decreasing_stat(&mut self) {
+        self.preserve_stat = true;
     }
 
     pub(crate) fn set_joint_point_bonus_context(
@@ -854,6 +875,17 @@ impl<'a> MedleyContributionDominance<'a> {
                 None,
                 0.0,
                 0.0,
+            );
+        }
+
+        if self.preserve_stat && self.profiles[left_idx].stat < self.profiles[right_idx].stat {
+            return contribution_replacement_reject(
+                ContributionReplacementReason::Stat,
+                f64::NEG_INFINITY,
+                None,
+                None,
+                self.profiles[left_idx].stat,
+                self.profiles[right_idx].stat,
             );
         }
 
@@ -1110,6 +1142,10 @@ impl<'a> MedleyContributionDominance<'a> {
         models: &SignatureContributionModels,
     ) -> bool {
         if left_idx == right_idx {
+            return false;
+        }
+
+        if self.preserve_stat && self.profiles[left_idx].stat < self.profiles[right_idx].stat {
             return false;
         }
 
@@ -2373,6 +2409,7 @@ mod tests {
             MedleyPruneSignature::Mixed,
             1,
             None,
+            false,
         );
 
         assert!(active.contains(&0));
@@ -2549,6 +2586,7 @@ mod tests {
             MedleyPruneSignature::Mixed,
             1,
             None,
+            false,
         );
 
         assert!(!comparison.replaces);

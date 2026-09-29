@@ -13,6 +13,7 @@ pub(super) fn contribution_pruned_card_indices(
     mode: SongMode,
     replacement_values: Option<&[u64]>,
     point_bonus_fixed_score_equivalent: Option<f64>,
+    preserve_stat: bool,
 ) -> Result<Vec<usize>, team::TeamBuildError> {
     contribution_pruned_card_indices_impl(
         cards,
@@ -23,6 +24,7 @@ pub(super) fn contribution_pruned_card_indices(
         None,
         replacement_values,
         point_bonus_fixed_score_equivalent,
+        preserve_stat,
     )
     .map(|(active, _)| active)
 }
@@ -38,6 +40,7 @@ pub(super) fn contribution_pruned_captain_indices(
     teammate_effective_stat: f64,
     replacement_values: Option<&[u64]>,
     point_bonus_fixed_score_equivalent: Option<f64>,
+    preserve_stat: bool,
 ) -> Result<(Vec<usize>, prune::MedleyPruneTrace), team::TeamBuildError> {
     contribution_pruned_card_indices_impl(
         cards,
@@ -48,6 +51,7 @@ pub(super) fn contribution_pruned_captain_indices(
         Some((teammate_skills, teammate_effective_stat)),
         replacement_values,
         point_bonus_fixed_score_equivalent,
+        preserve_stat,
     )
 }
 
@@ -61,6 +65,7 @@ fn contribution_pruned_card_indices_impl(
     fixed_teammate_context: Option<(&[TeamCardSkill; 4], f64)>,
     replacement_values: Option<&[u64]>,
     point_bonus_fixed_score_equivalent: Option<f64>,
+    preserve_stat: bool,
 ) -> Result<(Vec<usize>, prune::MedleyPruneTrace), team::TeamBuildError> {
     let queued = !chart.warning.is_empty();
     // External cooperative skills have a different contribution context. Keep
@@ -146,6 +151,7 @@ fn contribution_pruned_card_indices_impl(
                 teammate_bonus_bounds,
                 point_bonus_fixed_score_equivalent.unwrap_or_default(),
                 hard_prefiltered_replacement_values.as_deref(),
+                preserve_stat,
             )
         } else if let (Some(card_bonus_micros), Some(teammate_bonus_bounds), Some(fixed)) = (
             hard_prefiltered_replacement_values.as_deref(),
@@ -161,6 +167,7 @@ fn contribution_pruned_card_indices_impl(
                     card_bonus_micros,
                     teammate_bonus_bounds,
                     fixed,
+                    preserve_stat,
                 ),
                 prune::MedleyPruneTrace::default(),
             )
@@ -172,6 +179,7 @@ fn contribution_pruned_card_indices_impl(
                     &hard_prefiltered_profiles,
                     signature,
                     hard_prefiltered_replacement_values.as_deref(),
+                    preserve_stat,
                 ),
                 prune::MedleyPruneTrace::default(),
             )

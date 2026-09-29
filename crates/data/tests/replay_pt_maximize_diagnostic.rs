@@ -66,13 +66,14 @@ fn replays_pt_maximize_diagnostic() {
         "captainIndex must address captainCardId in the serialized team order",
     );
     eprintln!(
-        "replayed PT maximize: outer={:?} evaluation={:?} average_score={} average_pt={:.6} stat={} cards={:?}",
+        "replayed PT maximize: outer={:?} evaluation={:?} average_score={} average_pt={:.6} stat={} captain={} cards={:?}",
         result.event_type,
         team.evaluation.event_type,
         team.evaluation.score_distribution.score_sum as f64
             / team.evaluation.score_distribution.sample_count as f64,
         team.evaluation.average_pt.as_f64(),
         team.total_stat,
+        team.captain_card_id,
         team.team_card_ids,
     );
 

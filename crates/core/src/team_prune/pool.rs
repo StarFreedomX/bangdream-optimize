@@ -89,6 +89,7 @@ pub(crate) fn signature_candidate_pools(
             0.0,
             None,
             None,
+            false,
         );
         let active_ms = elapsed_ms(active_start);
         trace.active_indices_ms += active_ms;
@@ -137,6 +138,7 @@ fn signature_active_card_indices(
     fixed_teammate_effective_stat: f64,
     joint_point_bonus: Option<JointPointBonusPruneContext>,
     replacement_values: Option<&[u64]>,
+    preserve_stat: bool,
 ) -> (Vec<usize>, SignaturePoolStats) {
     let mut stats = SignaturePoolStats {
         signature: Some(signature),
@@ -164,6 +166,7 @@ fn signature_active_card_indices(
             joint_point_bonus
                 .map(|context| context.fixed_score_equivalent)
                 .unwrap_or_default(),
+            preserve_stat,
         )
     } else if let (Some(context), Some(card_bonus_micros)) = (joint_point_bonus, replacement_values)
     {
@@ -176,6 +179,7 @@ fn signature_active_card_indices(
             card_bonus_micros,
             context.teammate_bonus_bounds,
             context.fixed_score_equivalent,
+            preserve_stat,
         )
     } else {
         super::contribution::same_shape_contribution_active_indices(
@@ -185,6 +189,7 @@ fn signature_active_card_indices(
             signature,
             team_count,
             replacement_values,
+            preserve_stat,
         )
     };
     stats.trace.same_shape_contribution_ms += elapsed_ms(same_shape_start);
@@ -246,6 +251,7 @@ fn signature_active_card_indices(
             joint_point_bonus,
             stage_replacement_values.as_deref(),
             team_count,
+            preserve_stat,
             &mut stats,
         );
 
@@ -282,6 +288,7 @@ fn signature_active_card_indices(
             joint_point_bonus,
             cross_replacement_values.as_deref(),
             team_count,
+            preserve_stat,
             &mut stats,
         );
         let next_active = cross_survivors
@@ -374,6 +381,7 @@ fn divided_same_character_survivors(
     joint_point_bonus: Option<JointPointBonusPruneContext>,
     replacement_values: Option<&[u64]>,
     team_count: usize,
+    preserve_stat: bool,
     stats: &mut SignaturePoolStats,
 ) -> Vec<usize> {
     let context_start = Timer::start();
@@ -386,6 +394,9 @@ fn divided_same_character_survivors(
     );
     if let Some(teammate_skills) = fixed_teammate_skills {
         contribution.set_fixed_teammate_context(teammate_skills, fixed_teammate_effective_stat);
+    }
+    if preserve_stat {
+        contribution.require_non_decreasing_stat();
     }
     if let (Some(context), Some(card_bonus_micros)) = (joint_point_bonus, replacement_values) {
         contribution.set_joint_point_bonus_context(
@@ -456,6 +467,7 @@ fn divided_cross_character_survivors(
     joint_point_bonus: Option<JointPointBonusPruneContext>,
     replacement_values: Option<&[u64]>,
     team_count: usize,
+    preserve_stat: bool,
     stats: &mut SignaturePoolStats,
 ) -> Vec<usize> {
     let context_start = Timer::start();
@@ -468,6 +480,9 @@ fn divided_cross_character_survivors(
     );
     if let Some(teammate_skills) = fixed_teammate_skills {
         contribution.set_fixed_teammate_context(teammate_skills, fixed_teammate_effective_stat);
+    }
+    if preserve_stat {
+        contribution.require_non_decreasing_stat();
     }
     if let (Some(context), Some(card_bonus_micros)) = (joint_point_bonus, replacement_values) {
         contribution.set_joint_point_bonus_context(
@@ -686,6 +701,7 @@ pub(crate) fn single_team_active_card_indices(
     profiles: &[MedleyCardPruneProfile],
     signature: MedleyPruneSignature,
     replacement_values: Option<&[u64]>,
+    preserve_stat: bool,
 ) -> Vec<usize> {
     single_team_active_card_indices_impl(
         cards,
@@ -696,6 +712,7 @@ pub(crate) fn single_team_active_card_indices(
         0.0,
         None,
         replacement_values,
+        preserve_stat,
     )
     .0
 }
@@ -708,6 +725,7 @@ pub(crate) fn single_team_active_card_indices_with_joint_point_bonus(
     card_bonus_micros: &[u64],
     teammate_bonus_bounds: [u64; 2],
     fixed_score_equivalent: f64,
+    preserve_stat: bool,
 ) -> Vec<usize> {
     single_team_active_card_indices_impl(
         cards,
@@ -721,6 +739,7 @@ pub(crate) fn single_team_active_card_indices_with_joint_point_bonus(
             fixed_score_equivalent,
         }),
         Some(card_bonus_micros),
+        preserve_stat,
     )
     .0
 }
@@ -736,6 +755,7 @@ pub(crate) fn single_team_active_card_indices_with_fixed_teammate_skills_and_tra
     teammate_bonus_bounds: Option<[u64; 2]>,
     fixed_score_equivalent: f64,
     replacement_values: Option<&[u64]>,
+    preserve_stat: bool,
 ) -> (Vec<usize>, MedleyPruneTrace) {
     single_team_active_card_indices_impl(
         cards,
@@ -749,6 +769,7 @@ pub(crate) fn single_team_active_card_indices_with_fixed_teammate_skills_and_tra
             fixed_score_equivalent,
         }),
         replacement_values,
+        preserve_stat,
     )
 }
 
@@ -761,6 +782,7 @@ fn single_team_active_card_indices_impl(
     fixed_teammate_effective_stat: f64,
     joint_point_bonus: Option<JointPointBonusPruneContext>,
     replacement_values: Option<&[u64]>,
+    preserve_stat: bool,
 ) -> (Vec<usize>, MedleyPruneTrace) {
     let active_start = Timer::start();
     let charts = std::slice::from_ref(chart);
@@ -781,6 +803,7 @@ fn single_team_active_card_indices_impl(
         fixed_teammate_effective_stat,
         joint_point_bonus,
         replacement_values,
+        preserve_stat,
     );
     let mut trace = stats.trace;
     trace.active_indices_ms = elapsed_ms(active_start);
@@ -901,6 +924,7 @@ mod tests {
             0.0,
             None,
             None,
+            false,
         )
         .0
     }
@@ -914,7 +938,7 @@ mod tests {
             adjusted_card_stats(cards, &AreaItemPercent::empty(), &selected_cool_items());
         let profiles =
             medley_card_prune_profiles(cards, std::slice::from_ref(&chart), &card_stats).unwrap();
-        single_team_active_card_indices(cards, &chart, &profiles, signature, None)
+        single_team_active_card_indices(cards, &chart, &profiles, signature, None, false)
     }
 
     fn strong_card(card_id: u32, character_id: u32, attribute: Attribute) -> PreparedCard {
@@ -1156,6 +1180,7 @@ mod tests {
             0.0,
             None,
             None,
+            false,
         )
         .0;
 
