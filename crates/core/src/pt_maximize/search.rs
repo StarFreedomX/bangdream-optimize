@@ -504,6 +504,8 @@ fn search_team_for_mode_traced(
     );
     let cooperative_branch_supported =
         matches!(scenario, PtMaximizeSearchScenario::Cooperative { .. });
+    // A score/point-bonus improvement must not discard a higher-stat card
+    // while the team has a minimum stat requirement.
     let full_skill_indices = if cooperative_branch_supported {
         Vec::new()
     } else if best.is_some() && matches!(mode, SongMode::Mixed) && branch_meta_supported {
@@ -522,6 +524,7 @@ fn search_team_for_mode_traced(
             SingleCardRole::FullSkill,
             replacement_values.as_deref(),
             point_bonus_fixed_score_equivalent,
+            minimum_stat.is_some(),
         )
         .map_err(|error| PtMaximizeError::MedleyCandidate(error.to_string()))?
     };
@@ -548,6 +551,7 @@ fn search_team_for_mode_traced(
             teammate_effective_stat,
             replacement_values.as_deref(),
             point_bonus_fixed_score_equivalent,
+            minimum_stat.is_some(),
         )
         .map_err(|error| PtMaximizeError::MedleyCandidate(error.to_string()))?;
         if trace.enabled {
@@ -566,6 +570,7 @@ fn search_team_for_mode_traced(
             SingleCardRole::Filler,
             replacement_values.as_deref(),
             None,
+            false,
         )
         .map_err(|error| PtMaximizeError::MedleyCandidate(error.to_string()))?;
         if trace.enabled {
@@ -1925,6 +1930,106 @@ mod tests {
     }
 
     #[test]
+    fn cooperative_minimum_stat_keeps_a_viable_high_stat_captain() {
+        let mut nodes = Vec::new();
+        for activation in 0..6 {
+            nodes.push(ChartNode {
+                node_type: ChartNodeType::Skill,
+                time: activation as f64 * 10.0,
+            });
+            nodes.push(ChartNode {
+                node_type: ChartNodeType::Node,
+                time: activation as f64 * 10.0 + 1.0,
+            });
+        }
+        let mut chart = Chart::new(25, nodes);
+        chart.init(0, false).unwrap();
+        let cards = vec![
+            card(1, 1, 1_100.0, 1.5),
+            card(2, 1, 1_090.0, 1.5),
+            card(3, 3, 1_000.0, 0.3),
+            card(4, 4, 1_000.0, 0.3),
+            card(5, 5, 1_000.0, 0.3),
+            card(6, 6, 1_000.0, 0.3),
+        ];
+        let bonuses = BTreeMap::from([(2, 1_000_000_000)]);
+        let replacement_values = cards
+            .iter()
+            .map(|card| bonuses.get(&card.card_id).copied().unwrap_or_default())
+            .collect::<Vec<_>>();
+        let items = SelectedAreaItems {
+            band: "1".to_owned(),
+            attribute: "cool".to_owned(),
+            magazine: Magazine::Performance,
+        };
+        let cooperative = CooperativePtScenario {
+            event_type: EventType::Challenge,
+            teammates: [CooperativeTeammate {
+                expected_stat: 5_000,
+                leader_score_up: 1.3,
+                leader_skill_duration: 3.0,
+            }; 4],
+            leader_selection: CooperativeLeaderSelection::MaxStat,
+            point_bonus_basis_points: 0,
+            mission_support_pt_bonus: 0,
+        };
+        let teammate_skills =
+            std::array::from_fn(|index| cooperative.teammates[index].skill(index + 1));
+        let active = candidate::pruned_cooperative_captain_indices(
+            &cards,
+            &chart,
+            &AreaItemPercent::empty(),
+            &items,
+            SongMode::Mixed,
+            &teammate_skills,
+            cooperative_teammate_effective_stat(cooperative),
+            Some(&replacement_values),
+            point_multiplier_fixed_score_equivalent(EventType::Challenge),
+            true,
+        )
+        .unwrap()
+        .0;
+        assert!(
+            active.contains(&0),
+            "the 5,100-stat captain must remain eligible"
+        );
+        let unchecked = candidate::pruned_cooperative_captain_indices(
+            &cards,
+            &chart,
+            &AreaItemPercent::empty(),
+            &items,
+            SongMode::Mixed,
+            &teammate_skills,
+            cooperative_teammate_effective_stat(cooperative),
+            Some(&replacement_values),
+            point_multiplier_fixed_score_equivalent(EventType::Challenge),
+            false,
+        )
+        .unwrap()
+        .0;
+        assert!(
+            !unchecked.contains(&0),
+            "point-bonus pruning would otherwise remove the viable captain"
+        );
+
+        let result = search_team_for_mode(
+            &cards,
+            &chart,
+            &AreaItemPercent::empty(),
+            &items,
+            SongMode::Mixed,
+            &bonuses,
+            Some(5_095),
+            PtMaximizeSearchScenario::Cooperative {
+                scenario: cooperative,
+            },
+        )
+        .unwrap();
+        assert_eq!(result.captain_card_id, 1);
+        assert_eq!(result.total_stat, 5_100);
+    }
+
+    #[test]
     fn queued_single_pt_search_matches_every_unpruned_team() {
         for (point_bonus, festival) in [(false, false), (true, false), (false, true)] {
             let mut chart = Chart::new_with_fever_section(
@@ -2132,6 +2237,7 @@ mod tests {
             SingleCardRole::FullSkill,
             Some(&replacement_values),
             point_multiplier_fixed_score_equivalent(EventType::Challenge),
+            false,
         )
         .unwrap();
         let result = search_team_for_mode(

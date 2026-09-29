@@ -1,5 +1,7 @@
 import { assetBaseUrl, cardArtUrls } from '../assets/index.js';
-import { catalogModels } from './cards/model.js';
+import { allCardModels } from './cards/model.js';
+import { imageSources } from './cards/images.js';
+import { customCardPresentationKey } from '../models/custom-cards.js';
 import { resolveCardCover } from './cards/rules.js';
 import { profilePreference, gameText } from './preferences.js';
 import { openCoverPicker } from './cover-picker.js';
@@ -74,9 +76,10 @@ export function createHeroes({getCore,getPlayer,getProfileId,readAsset}){
   coverButton.onclick=()=>openCoverPicker({host:document.querySelector('#card-library-unified'),getCore,getPlayer,getProfileId,onApply:update,opener:coverButton});
   async function update(){
     const player=getPlayer(),core=getCore();if(!core)return;
-    const selected=resolveCardCover(catalogModels(core,player,getProfileId()),player.server,profilePreference(getProfileId(),'cover',{}));
-    const nextCardKey=`${getProfileId()}:${selected.card?.id}:${selected.variant}`;
-    if(nextCardKey!==cardKey){cardKey=nextCardKey;const scene=document.createElement('div');scene.className='hero-cover-scene';const frame=document.createElement('div');frame.className='hero-cover-frame';cards.querySelector('.hero-visual').replaceChildren(scene,frame);if(selected.card){const image=await loadImage(cardArtUrls({card:selected.card.record,illustTrainingStatus:selected.variant!=='normal'}));if(nextCardKey===cardKey&&image){image.alt='';scene.append(image);}}}
+    const selected=resolveCardCover(allCardModels(core,player,getProfileId()),player.server,profilePreference(getProfileId(),'cover',{}));
+    const customKey=selected.card?.custom?JSON.stringify(customCardPresentationKey(selected.card.customConfig)):'';
+    const nextCardKey=`${getProfileId()}:${selected.card?.id}:${selected.variant}:${customKey}`;
+    if(nextCardKey!==cardKey){cardKey=nextCardKey;const scene=document.createElement('div');scene.className='hero-cover-scene';const frame=document.createElement('div');frame.className='hero-cover-frame';cards.querySelector('.hero-visual').replaceChildren(scene,frame);if(selected.card){const sources=selected.card.custom?imageSources(selected.card):cardArtUrls({card:selected.card.record,illustTrainingStatus:selected.variant!=='normal'});const image=await loadImage(sources);if(nextCardKey===cardKey&&image){image.alt='';scene.append(image);}}}
     const event=player.eventPresets?.[player.currentEvent]||core.events?.[player.currentEvent];
     const nextEventKey=`${player.server}:${player.currentEvent}:${event?.assetBundleName}`;
     if(nextEventKey===eventKey)return;eventKey=nextEventKey;const token=++sequence;

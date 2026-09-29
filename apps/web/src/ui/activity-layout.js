@@ -1,10 +1,12 @@
 import {designFragment} from './approved/templates.js';
 import {mountDesignControls,hydrateDesignIcons} from './design-controls.js';
-import {openBonusEditor} from './bonus-editor.js';
+import {openBonusEditor} from './bonus-editor.js?v=2';
 import { designIcon } from './fidelity.js';
-import { assetImage, attributeIconUrls, characterIconUrls, cardIconUrls, starIconUrls } from '../assets/index.js';
+import { assetImage, attributeIconUrls, characterIconUrls, cardIconUrls } from '../assets/index.js';
 import { gameText } from './preferences.js';
 import { attributeNames } from './cards/rules.js';
+import { cardModel } from './cards/model.js';
+import { imageSources } from './cards/images.js';
 import { mountEventSelection, eventTypeNames } from './event-selection.js';
 import {eventCardPoolInfo, supportsEventCardPool} from '../models/event-card-pool.js';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
@@ -58,7 +60,19 @@ export function mountActivityLayout({elements,getPlayer,getCore,getProfileId,wri
   const chars=el('div','pb-character-summary');for(const c of event.characters||[]){const item=el('span');const name=gameText(getCore()?.characters[c.characterId]?.characterName,`角色 ${c.characterId}`);item.title=name;item.append(assetImage(characterIconUrls(c.characterId),'',name)||el('span'),el('b','',`+${c.percent}%`));chars.append(item);}left.append(chars);
   right.append(label('属性与角色同时匹配',family));const metrics=el('div','pb-metrics');const metric=(title,value)=>{const n=el('div');if(title)n.append(el('span','',title));n.append(el('strong','',`+${value||0}%`));return n;};metrics.append(metric('',event.eventAttributeAndCharacterBonus?.[point?'pointPercent':'parameterPercent']));right.append(metrics,el('p','pb-help',`同时满足已选属性和角色时，额外增加${family}加成。`));
   if(!point){const extra=el('div','pb-stat-parameters');for(const [key,title]of[['performance','演出'],['technique','技巧'],['visual','形象']])extra.append(metric(title,event.eventCharacterParameterBonus?.[key]));right.append(extra);}
-  const cardrow=el('div','pb-card-summary-row');cardrow.append(label('指定卡牌',`${event.members?.length||0} 张`));const cards=el('div','pb-card-summary');for(const m of event.members||[]){const c=getCore()?.cards[m.situationId],item=el('span');item.title=`#${m.situationId} · ${gameText(c?.prefix,'')}`;const art=assetImage(cardIconUrls({cardId:m.situationId,card:c,illustTrainingStatus:true}),'pb-card-art',`卡牌 ${m.situationId}`);if(art)item.append(art);item.append(el('b','',`+${m.percent}%`));cards.append(item);}if(!cards.children.length)cards.append(el('span','pb-muted','未设置'));cardrow.append(cards);summary.append(cardrow);
+  const cardrow=el('div','pb-card-summary-row');cardrow.append(label('指定卡牌',`${event.members?.length||0} 张`));
+  const cards=el('div','pb-card-summary');
+  for(const m of event.members||[]){
+   const card=cardModel(getCore(),player,m.situationId,undefined,getProfileId());
+   const id=card.displayId||`#${m.situationId}`;
+   const item=el('span');item.title=`${id} · ${card.title}`;
+   const art=assetImage(card.custom?imageSources(card):cardIconUrls({cardId:card.id,card:card.record,illustTrainingStatus:true}),'pb-card-art',card.title);
+   if(art)item.append(art);
+   if(card.custom)item.append(el('small','pb-card-id',id));
+   item.append(el('b','',`+${m.percent}%`));cards.append(item);
+  }
+  if(!cards.children.length)cards.append(el('span','pb-muted','未设置'));
+  cardrow.append(cards);summary.append(cardrow);
  }
  function editBonuses(){openBonusEditor({getPlayer,getCore,getProfileId,eventSnapshot,writePlayer,renderForms});}
 

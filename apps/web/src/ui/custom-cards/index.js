@@ -1,7 +1,8 @@
 import {customCardsMarkup} from './template.js';
-import {customSkillDurationError,stepCustomSkillDuration,customCardEntry,customCardDraft,customCardLabel,nextCustomCardId,CUSTOM_CARD_ID_BASE} from '../../models/custom-cards.js';
+import {customSkillDurationError,stepCustomSkillDuration,customCardEntry,customCardDraft,customCardLabel,customCardReferences,removeCustomCardReferences,nextCustomCardId,CUSTOM_CARD_ID_BASE} from '../../models/custom-cards.js';
+import {parseGarupaCardSource,garupaSuiteCardDraft,garupaQuickCardDraft} from '../../models/garupa-suite-import.js';
 import {cardArtUrls,assetOriginUrl} from '../../assets/index.js';
-import {gameText} from '../preferences.js';
+import {gameText,profilePreference,saveProfilePreference} from '../preferences.js';
 
 export function createCustomCardsView({host,getCore,getPlayer,getProfileId,writePlayer,onChange}) {
 const portal=document.createElement('div');portal.className='custom-card-ui';document.body.append(portal);
@@ -25,7 +26,8 @@ const artwork=c=>c.image||fallback;
 const character=id=>data.characters.find(c=>c.id===Number(id))||{id:0,name:'未知角色',band:0};
 function seed(){return [{enabled:true,name:'',character:data.characters[0]?.id,attribute:'Powerful',rarity:5,stats:[11000,11000,11000],mastery:0,skillType:'score',duration:7,score:130,unifiedScore:150,lowerScore:100,conditionAttribute:'none',conditionBand:0,image:'',notes:'',advanced:null}];}
 let filter='all',draft=null,original='',editing=false,openedBy=null,confirmAction=null;
-const editor=$('#editor'),form=$('#card-form'),f=name=>form.elements.namedItem(name);
+const editor=$('#editor'),importDialog=$('#import-dialog'),form=$('#card-form'),f=name=>form.elements.namedItem(name);
+let importCatalog=null,importSelection=null,importFileText='',importReadToken=0;
 $('#attribute-filter').innerHTML=['all',...attrs].map(a=>`<button type="button" data-filter="${a}" aria-pressed="${a==='all'}" aria-label="${a==='all'?'全部属性':a}">${a==='all'?'全部':attrImage(a)}</button>`).join('');
 $('#attribute-options').innerHTML=attrs.map(a=>`<label><input type="radio" name="attribute" value="${a}" required><span>${attrImage(a)}${a}</span></label>`).join('');
 $('#rarity-options').innerHTML=[5,4,3,2,1].map(r=>`<label><input type="radio" name="rarity" value="${r}"><span>${rarityImage(r)}${r}</span></label>`).join('');
@@ -36,20 +38,109 @@ hydrate();hydrate(portal);
 function baseStats(c){if(!c.advanced)return c.stats;const a=c.advanced,row=a.levels.find(r=>r.level===a.current);return (row?.stats||[NaN,NaN,NaN]).map((value,i)=>value+a.bonuses.reduce((sum,b)=>sum+(b.enabled?b.stats[i]:0),0));}
 function power(c){const values=baseStats(c).map(v=>v+c.rarity*c.mastery*50);return {values,total:values.reduce((a,b)=>a+b,0)};}
 const skillNames={score:'分数提升',perfect:'PERFECT 条件 · P',great:'GREAT 以下降档 · G',unified:'队伍条件加分',rateup:'PERFECT 递增'};
-function skill(c){const duration=Number.isFinite(c.duration)?c.duration:'—',value=c.skillType==='unified'?(c.conditionAttribute==='none'&&!Number(c.conditionBand)?`${c.unifiedScore}%`:`${c.score} → ${c.unifiedScore}%`):c.skillType==='rateup'?`${c.score} + 0.5×P`:c.score+'%';let description=`${duration} 秒内，得分提升 ${c.score}%。`;
+function skill(c){
+ const duration=Number.isFinite(c.duration)?c.duration:'—';
+ const constrained=c.conditionAttribute!=='none'||Number(c.conditionBand)>0;
+ let value=`${c.score}%`,description=`${duration} 秒内，得分提升 ${c.score}%。`;
+ if(c.skillType==='unified')value=constrained?`${c.score}/${c.unifiedScore}%`:`${c.unifiedScore}%`;
+ if(c.skillType==='rateup')value=`${c.score} + 0.5×P`;
  if(c.skillType==='perfect')description=`${duration} 秒内，PERFECT 时得分提升 ${c.score}%。`;
  if(c.skillType==='great')description=`${duration} 秒内得分提升 ${c.score}%，出现 GREAT 以下判定后降为 ${c.lowerScore}%。`;
- if(c.skillType==='unified'){const condition=[c.conditionAttribute!=='none'?c.conditionAttribute:'',Number(c.conditionBand)>0?bands[c.conditionBand]:''].filter(Boolean).join(' 与 ');description=condition?`${duration} 秒内得分提升 ${c.score}%；全队满足 ${condition} 时提升至 ${c.unifiedScore}%。`:`${duration} 秒内得分提升 ${c.unifiedScore}%；属性与乐队均不限制，直接使用触发后加成。`;}
+ if(c.skillType==='unified'){
+  const condition=[c.conditionAttribute!=='none'?c.conditionAttribute:'',Number(c.conditionBand)>0?bands[c.conditionBand]:''].filter(Boolean).join(' 与 ');
+  description=constrained?`${duration} 秒内得分提升 ${c.score}%；全队满足 ${condition} 时提升至 ${c.unifiedScore}%。`:`${duration} 秒内得分提升 ${c.unifiedScore}%；属性与乐队均不限制，直接使用触发后加成。`;
+ }
  if(c.skillType==='rateup')description=`${duration} 秒内，得分从 ${c.score}% 起，每个 PERFECT 再提升 0.5%，上限 ${c.score+50}%。`;
- return {value,description,duration,name:skillNames[c.skillType]};
+ const birthday=Number(c.sourceSkillId??c.sourceQuick?.skillId)===57;
+ return {value,description,duration,name:birthday?'生日卡 · B':skillNames[c.skillType]};
 }
 function toast(message){const node=$('#toast');node.textContent=message;node.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>node.hidden=true,3300);}
-function persist(next){
+function importStatus(message,error=false){const node=$('#import-status');node.textContent=message;node.dataset.error=String(error);}
+function resetImport(){
+ importReadToken++;importCatalog=null;importSelection=null;importFileText='';
+ $('#import-entry').hidden=false;$('#import-confirmed').hidden=true;$('.cc-import-example').open=false;
+ $('#import-json').value='';$('#import-file').value='';$('#import-file-status').textContent='';
+ $('#import-search').value='';$('#import-search').disabled=true;$('#import-results').replaceChildren();
+ $('#import-preview').textContent='选择一张卡牌查看匹配结果。';$('#import-summary').textContent='';
+ $('#import-back').hidden=true;$('#import-parse').hidden=false;$('#import-parse').disabled=true;
+ $('#import-save').hidden=true;$('#import-save').textContent='导入卡牌';$('#import-save').disabled=true;importStatus('');
+}
+function closeImport(){if(importDialog.open)importDialog.close();}
+function renderImportResults(){
+ const query=$('#import-search').value.trim().toLowerCase(),matches=(importCatalog?.cards||[]).filter(card=>!query||card.search.includes(query));
+ $('#import-results').innerHTML=matches.length?matches.slice(0,50).map(card=>`<button type="button" data-import-card="${card.situationId}" aria-pressed="${importSelection?.sourceSituationId===card.situationId}"><strong>${escape(card.name)}</strong><span>ID ${card.situationId} · ${escape(card.characterName)} · ${card.rarity} 星 · ${escape(card.attribute)}</span></button>`).join(''):'<p>没有匹配的卡牌</p>';
+ $('#import-summary').textContent=`已识别 ${importCatalog?.cards.length||0} 张卡牌${matches.length>50?' · 当前显示前 50 张':''}`;
+}
+function selectImportCard(sourceId){
+ importSelection=null;$('#import-save').disabled=true;
+ try{
+  const quick=importCatalog.format==='quick';
+  const {draft:card,match}=quick?garupaQuickCardDraft(importCatalog.master,sourceId,getCore()):garupaSuiteCardDraft(importCatalog.master,sourceId,getCore());
+  const existing=cards.find(value=>Number(value.sourceSituationId)===Number(sourceId));
+  if(!data.characters.some(value=>value.id===card.character))throw new Error('此角色尚未在当前自定义卡牌角色列表中开放');
+  customCardEntry({...card,id:nextId()},getCore(),{id:nextId(),uid:'import-preview'});
+  const total=power(card).total,info=skill(card);
+  const matched=match?.matched??card.enabled;
+  $('#import-preview').innerHTML=`<h3>${escape(card.name)}</h3><p class="cc-import-identity">${escape(character(card.character).name)} · ${card.rarity} 星 · ${escape(card.attribute)} · ID ${sourceId}</p><p class="cc-import-match" data-matched="${matched}">${matched?'技能已匹配':'技能未匹配'}</p><dl><dt>综合力</dt><dd>${number(total)}</dd>${matched?`<dt>技能</dt><dd>${escape(info.name)} · ${escape(info.value)} · ${info.duration} 秒</dd>`:''}</dl>${!matched?`<p class="cc-import-warning">${escape(match?.reason||'当前游戏数据中找不到对应技能')}。导入后可在卡牌编辑器中补全技能。</p>`:''}${existing?`<p class="cc-import-warning">已导入为 ${idText(existing.id)}，可在卡牌列表中编辑。</p>`:''}`;
+  $('#import-save').textContent=matched?'导入卡牌':'导入并补充';
+  if(existing){importStatus(`卡牌 ID ${sourceId} 已导入`,true);}
+  else {importSelection=card;$('#import-save').disabled=false;importStatus('');}
+ }catch(error){$('#import-preview').textContent=error.message||'无法读取此卡牌';importStatus(error.message||'无法读取此卡牌',true);}
+ renderImportResults();
+}
+$('#import').onclick=()=>{resetImport();importDialog.showModal();$('#import-json').focus();};
+$('#import-close').onclick=$('#import-cancel').onclick=closeImport;
+importDialog.addEventListener('close',resetImport);
+$('#import-json').oninput=()=>{importReadToken++;importFileText='';$('#import-file').value='';$('#import-file-status').textContent='';$('#import-parse').disabled=!$('#import-json').value.trim();importStatus('');};
+$('#import-upload').onclick=()=>$('#import-file').click();
+$('#import-file').onchange=async event=>{
+ const file=event.target.files?.[0],token=++importReadToken;
+ if(!file)return;
+ importFileText='';$('#import-json').value='';$('#import-parse').disabled=true;
+ $('#import-file-status').textContent=`正在读取 ${file.name}…`;importStatus('');
+ try{
+  const source=await file.text();
+  if(token!==importReadToken||!importDialog.open)return;
+  importFileText=source;$('#import-file-status').textContent=file.name;$('#import-parse').disabled=!source.trim();
+ }catch(error){if(token!==importReadToken||!importDialog.open)return;$('#import-file-status').textContent=file.name;importStatus(error.message||'文件读取失败',true);}
+};
+$('#import-parse').onclick=()=>{
+ try{
+  const source=$('#import-json').value.trim()||importFileText;
+  importCatalog=parseGarupaCardSource(source);
+  if(!importCatalog.cards.length)throw new Error('JSON 中没有可导入的卡牌');
+  importSelection=null;$('#import-entry').hidden=true;$('#import-confirmed').hidden=false;
+  $('#import-confirmed').dataset.single=String(importCatalog.cards.length===1);
+  $('#import-summary').textContent=`已识别 ${importCatalog.cards.length} 张卡牌`;
+  $('#import-back').hidden=false;$('#import-parse').hidden=true;$('#import-save').hidden=false;
+  $('#import-search').disabled=false;$('#import-search').value='';renderImportResults();
+  selectImportCard(importCatalog.cards[0].situationId);
+ }catch(error){importCatalog=null;importStatus(error.message||'JSON 格式无效',true);}
+};
+$('#import-back').onclick=()=>{
+ importCatalog=null;importSelection=null;$('#import-entry').hidden=false;$('#import-confirmed').hidden=true;
+ $('#import-back').hidden=true;$('#import-parse').hidden=false;$('#import-save').hidden=true;importStatus('');$('#import-json').focus();
+};
+$('#import-search').oninput=()=>{if(!importCatalog)return;importSelection=null;$('#import-save').disabled=true;$('#import-preview').textContent='选择一张卡牌查看匹配结果。';importStatus('');renderImportResults();};
+$('#import-results').onclick=event=>{const button=event.target.closest('[data-import-card]');if(button&&importCatalog)selectImportCard(Number(button.dataset.importCard));};
+$('#import-save').onclick=()=>{
+ if(!importSelection)return;
+ if(profileId!==getProfileId()){importStatus('档案已切换，请重新导入',true);return;}
+ if(cards.some(card=>Number(card.sourceSituationId)===importSelection.sourceSituationId)){importStatus('这张卡牌已导入当前档案',true);return;}
+ const card={...structuredClone(importSelection),id:nextId(),updated:Date.now()};
+ if(persist([...cards,card])){
+  closeImport();
+  if(card.enabled)toast(`已导入 ${card.name} · ${idText(card.id)}`);
+  else {openEditor(cards.find(value=>value.id===card.id));$('#form-status').textContent='请补全技能参数后启用卡牌';f('skillType').focus();}
+ }
+};
+function persist(next,removedId){
  try {
   if(profileId!==getProfileId())throw new Error('档案已切换，请重新打开编辑器');
   const player=structuredClone(getPlayer()),customCards={};
   for(const card of next)customCards[card.id]=customCardEntry(card,getCore(),{id:card.id,uid:card.uid});
   player.customCards=customCards;
+  if(removedId!=null)removeCustomCardReferences(player,removedId);
   player.nextCustomCardId=Math.max(nextSequence,CUSTOM_CARD_ID_BASE+1,...next.map(c=>c.id+1));
   for(const card of Object.values(customCards))if(card.enabled)player.characterBouns[card.definition.characterId]??={potential:{performance:0,technique:0,visual:0},characterTask:{performance:0,technique:0,visual:0}};
   writePlayer(player);cards=Object.values(customCards).map(customCardDraft);nextSequence=player.nextCustomCardId;render();onChange?.();return true;
@@ -67,6 +158,8 @@ function requestClose(){if(JSON.stringify(draft)!==original)confirm('放弃未�
 function nextId(){return nextSequence;}
 function openEditor(card){editing=!!card;openedBy=document.activeElement;draft=card?structuredClone(card):{...seed()[0],id:nextId(),demo:false,name:'',stats:[11000,11000,11000],notes:'',advanced:null};
  $('#editor-title').textContent=editing?'编辑自定义卡牌':'创建自定义卡牌';$('#editor-eyebrow').textContent=idText(draft.id)+' / CUSTOM CARD';$('#form-status').textContent='保存到当前档案的自定义列表';$('#image-error').textContent='';$('#image-file').value='';
+ const originalSkill=$('#source-quick-skill');originalSkill.hidden=!draft.sourceQuick;
+ originalSkill.textContent=draft.sourceQuick?`原技能 ID ${draft.sourceQuick.skillId??'未知'}：${[draft.sourceQuick.skillName,draft.sourceQuick.simpleDescription,draft.sourceQuick.description].filter(Boolean).join(' · ')||'未提供描述'}。原始 1 级时长：${draft.sourceQuick.duration??'未知'} 秒。养成加值：${draft.sourceQuick.bonusBasis}。`:'';
  for(const name of ['name','character','mastery','skillType','duration','score','unifiedScore','lowerScore','conditionAttribute','conditionBand','notes'])f(name).value=draft[name];
  for(const a of all('input[name=attribute]'))a.checked=a.value===draft.attribute;
  for(const a of all('input[name=rarity]'))a.checked=Number(a.value)===draft.rarity;
@@ -147,15 +240,49 @@ $('#add-level').onclick=()=>{const a=draft.advanced;const level=Array.from({leng
 $('#level-rows').onclick=e=>{const b=e.target.closest('[data-remove-level]');if(!b||draft.advanced.levels.length===1)return;draft.advanced.levels.splice(Number(b.dataset.removeLevel),1);if(!draft.advanced.levels.some(x=>x.level===draft.advanced.current))draft.advanced.current=draft.advanced.levels[0].level;renderAdvanced();paintPreview();};
 $('#art-gallery').onclick=e=>{const b=e.target.closest('[data-art]');if(!b)return;draft.image=data.examples[Number(b.dataset.art)].image;paintPreview();};
 $('#image-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2*1024*1024){$('#image-error').textContent='请选择 2 MB 以内的 PNG、JPEG 或 WebP 图片。';return;}const active=draft;try{const src=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});if(active!==draft)return;const image=new Image();image.src=src;await image.decode();if(active!==draft)return;draft.image=src;$('#image-error').textContent='';paintPreview();}catch{$('#image-error').textContent='无法读取这张图片，请更换文件。';}};
-form.onsubmit=e=>{e.preventDefault();durationTouched=true;validateDuration(true);if(!form.reportValidity())return;collect();draft.name=draft.name.trim()||character(draft.character).name+' · 自定义';draft.updated=Date.now();draft.demo=false;if(persist([...cards.filter(c=>c.id!==draft.id),structuredClone(draft)])){closeEditor();toast(editing?'卡牌修改已保存':'自定义卡牌已创建');}};
+form.onsubmit=e=>{e.preventDefault();durationTouched=true;validateDuration(true);if(!form.reportValidity())return;collect();if(draft.sourceQuick&&draft.enabled&&draft.score===0){$('#form-status').textContent='请填写技能参数后再启用。';f('score').focus();return;}draft.name=draft.name.trim()||character(draft.character).name+' · 自定义';draft.updated=Date.now();draft.demo=false;if(persist([...cards.filter(c=>c.id!==draft.id),structuredClone(draft)])){closeEditor();toast(editing?'卡牌修改已保存':'自定义卡牌已创建');}};
 all('[data-close]').forEach(b=>b.onclick=requestClose);editor.addEventListener('cancel',e=>{e.preventDefault();requestClose();});
 $('#create').onclick=$('#empty-create').onclick=()=>openEditor();$('#search').oninput=render;$('#sort').onchange=render;
 $('#attribute-filter').onclick=e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;all('[data-filter]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render();};
-$('#custom-list').onclick=e=>{const button=e.target.closest('[data-action]'),row=e.target.closest('[data-card]');if(!button||!row)return;const c=cards.find(c=>c.id===Number(row.dataset.card));if(button.dataset.action==='toggle'){if(persist(cards.map(x=>x.id===c.id?{...x,enabled:!x.enabled}:x))){$(`[data-card="${c.id}"] [data-action=toggle]`)?.focus();toast(c.enabled?'已停用，卡牌配置仍保留':'已启用此自定义卡牌');}}if(button.dataset.action==='edit')openEditor(c);if(button.dataset.action==='copy'){if(persist([...cards,{...structuredClone(c),id:nextId(),uid:undefined,name:c.name+' · 副本',updated:Date.now(),demo:false}]))toast('已复制，可继续编辑新卡牌');}if(button.dataset.action==='delete')confirm('删除自定义卡牌？',`「${c.name}」将从当前档案移除。${getPlayer().ptEvaluate?.teams?.flat().includes(c.id)?'指定队伍仍在使用它，删除后需要重新选择卡位。':'已有计算结果会保留当时的卡牌资料。'}`,'删除卡牌',()=>{if(persist(cards.filter(x=>x.id!==c.id)))toast('自定义卡牌已删除');});};
+function confirmDeleteCard(card){
+ const references=customCardReferences(getPlayer(),card.id),cover=profilePreference(profileId,'cover',{}),isCover=Number(cover.cardId)===card.id;
+ const changes=[];
+ if(references.teamSlots)changes.push(`清空指定队伍中的 ${references.teamSlots} 个卡位`);
+ if(references.eventBonuses)changes.push(`移除活动加成中的 ${references.eventBonuses} 项`);
+ if(isCover)changes.push('将卡牌封面恢复为自动选择');
+ const effect=changes.length?`确认后还会${changes.join('，')}。`:'';
+ confirm('删除自定义卡牌？',`「${card.name}」（${idText(card.id)}）将从当前档案移除。${effect}已有计算结果保留当时的卡牌资料。`,'删除并清理配置',()=>{
+  if(!persist(cards.filter(value=>value.id!==card.id),card.id))return;
+  if(isCover&&!saveProfilePreference(profileId,'cover',{...cover,mode:'auto',cardId:null})){
+   toast('卡牌已删除，但封面偏好保存失败，请重新设置封面');return;
+  }
+  toast('自定义卡牌已删除，相关配置已清理');
+ });
+}
+$('#custom-list').onclick=e=>{
+ const button=e.target.closest('[data-action]'),row=e.target.closest('[data-card]');
+ if(!button||!row)return;
+ const card=cards.find(value=>value.id===Number(row.dataset.card));
+ if(!card)return;
+ if(button.dataset.action==='toggle'){
+  if(!card.enabled&&card.sourceQuick&&card.score===0){
+   openEditor(card);$('#form-status').textContent='请先填写技能参数，再启用卡牌。';return;
+  }
+  if(persist(cards.map(value=>value.id===card.id?{...value,enabled:!value.enabled}:value))){
+   $(`[data-card="${card.id}"] [data-action=toggle]`)?.focus();
+   toast(card.enabled?'已停用，卡牌配置仍保留':'已启用此自定义卡牌');
+  }
+ }else if(button.dataset.action==='edit')openEditor(card);
+ else if(button.dataset.action==='copy'){
+  const copy={...structuredClone(card),id:nextId(),uid:undefined,sourceSituationId:undefined,sourceSkillId:undefined,
+   sourceQuick:undefined,durations:undefined,skillLevel:undefined,name:card.name+' · 副本',updated:Date.now(),demo:false};
+  if(persist([...cards,copy]))toast('已复制，可继续编辑新卡牌');
+ }else if(button.dataset.action==='delete')confirmDeleteCard(card);
+};
 
 function refresh(){
  const current=getProfileId();
- if(profileId!==current){if(editor.open)closeEditor();$('#confirm-dialog').close();filter='all';$('#search').value='';$('#sort').value='updated';all('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter==='all')));}
+  if(profileId!==current){if(editor.open)closeEditor();if(importDialog.open)closeImport();$('#confirm-dialog').close();filter='all';$('#search').value='';$('#sort').value='updated';all('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter==='all')));}
  profileId=current;const core=getCore(),player=getPlayer();
  data.characters=Object.entries(core?.characters||{}).filter(([,c])=>bands[c.bandId]).map(([id,c])=>({id:Number(id),band:Number(c.bandId),name:gameText(c.characterName,'角色 '+id)}));
  data.examples=Object.keys(player.cardList||{}).map(id=>({id,record:core?.cards?.[id]})).filter(c=>c.record?.resourceSetName).slice(-6).reverse().map(c=>({name:gameText(core.characters[c.record.characterId]?.characterName,'卡牌 '+c.id),image:cardArtUrls({card:c.record})[0]?.replace(/^.*?\/assets\//,'https://bestdori.com/assets/')})).filter(c=>c.image);
@@ -164,5 +291,5 @@ $('#art-gallery').innerHTML=data.examples.map((c,i)=>`<button type="button" data
 
  cards=Object.values(player.customCards||{}).map(customCardDraft);nextSequence=nextCustomCardId(player);render();
 }
-refresh();return {refresh,openEditor,destroy(){editor.close();$('#confirm-dialog').close();portal.remove();host.remove();}};
+ refresh();return {refresh,openEditor,destroy(){editor.close();closeImport();$('#confirm-dialog').close();portal.remove();host.remove();}};
 }

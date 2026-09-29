@@ -4,7 +4,7 @@ import {gameText,languageOrder,saveProfilePreference,profilePreference} from '..
 import {defaultFilters,filterCards,cardMatchesReleaseFilter,resolveCardCover,comparator,normalizeCardSort,groupCards} from '../src/ui/cards/rules.js';
 import {toggleSelectionScope} from '../src/ui/cards/catalog.js';
 import {planBulk} from '../src/ui/cards/bulk.js';
-import {cardModel,cardConfig} from '../src/ui/cards/model.js';
+import {cardModel,cardConfig,catalogModels,allCardModels} from '../src/ui/cards/model.js';
 import {bonusApplication} from '../src/ui/activity.js';
 import {importChanges} from '../src/ui/import-review.js';
 
@@ -84,6 +84,24 @@ test('formal card model separates training growth from illustration and reads re
 test('card detail includes the trained maximum instead of displaying 60 / 50',()=>{
   const c=cardModel({cards:{1:{levelLimit:50,stat:{1:{},60:{},training:{levelLimit:10}},rarity:5}}},{cardList:{1:{level:60,training:true}}},1);
   assert.equal(c.maxLevel,60);assert.equal(c.level,60);
+});
+test('activity bonus picker includes custom cards without a server release date',()=>{
+  const customId=1_000_000_001;
+  const zero={performance:0,technique:0,visual:0};
+  const core={cards:{1:{characterId:2,rarity:5,attribute:'pure',releasedAt:[null,null,null,Date.now()-1000,null]}},characters:{2:{bandId:1,characterName:['角色']}}};
+  const player={server:'cn',cardList:{1:{level:60}},customCards:{[customId]:{
+    enabled:true,definition:{cardId:customId,characterId:2,bandId:1,rarity:5,attribute:'pure',levelStats:{60:zero},trainingStat:zero,episodeStats:[zero,zero]},
+    growth:{level:60,skillLevel:5,training:true,episodes:[true,true],limitBreakRank:0},editor:{name:'试算卡'},
+  }}};
+  assert.deepEqual(catalogModels(core,player,'profile').map(c=>c.id),[1]);
+  const choices=allCardModels(core,player,'profile');
+  assert.deepEqual(choices.map(c=>c.id),[1,customId]);
+  assert.equal(choices[1].displayId,'C-001');
+  assert.equal(resolveCardCover(choices,'cn',{mode:'manual',cardId:customId}).card.id,customId);
+  assert.equal(resolveCardCover(choices,'cn').card.id,1);
+  assert.equal(resolveCardCover([{...choices[0],releaseDates:{}},choices[1]],'cn').card.id,1);
+  assert.equal(resolveCardCover([choices[1]],'cn').card.id,customId);
+  assert.deepEqual(filterCards(choices,defaultFilters([{id:2,band:1,name:'角色'}],'cn')).map(c=>c.id),[1,customId]);
 });
 test('bonus application follows calculation target and live variant',()=>{
   assert.equal(bonusApplication('challenge','ptMaximize','solo'),'point');

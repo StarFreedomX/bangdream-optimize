@@ -190,3 +190,45 @@ html:has(.custom-card-ui dialog[open]){overflow:hidden}
 .custom-card-ui .duration-steps button:active{background:#e5d7ec}
 .custom-card-ui .duration-steps svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 @media(pointer:coarse){.custom-card-ui .duration-control .duration-steps{width:40px;grid-template-rows:repeat(2,28px)}}
+
+.custom-card-ui .cc-intro-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.custom-card-ui #cc-import-dialog{width:min(700px,calc(100vw - 28px));max-height:calc(100dvh - 28px);padding:0;border:1px solid #e7ddec;border-radius:6px;box-shadow:0 20px 65px #3f2b5140;color:#5d4a68}
+.custom-card-ui #cc-import-dialog[open]{display:flex;flex-direction:column}
+.custom-card-ui #cc-import-dialog .dialog-footer{justify-content:flex-end}
+.custom-card-ui .cc-import-body{padding:20px 26px;overflow:auto;min-height:0}
+.custom-card-ui .cc-import-body label{display:grid;gap:6px;font-size:12px;color:#775d84}
+.custom-card-ui .cc-import-example{margin-bottom:18px;border:1px solid #eae2ef;border-radius:4px;background:#faf7fb}
+.custom-card-ui .cc-import-example summary{padding:11px 13px;color:#7d608b;font-size:12px;cursor:pointer}
+.custom-card-ui .cc-import-example pre{margin:0;padding:12px 15px;border-top:1px solid #eae2ef;max-height:240px;overflow:auto;color:#665071;font:11px/1.55 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.custom-card-ui .cc-import-json-label textarea{width:100%;min-height:175px;resize:vertical;padding:11px 12px;border:1px solid #ddd1e4;border-radius:4px;background:white;color:#584264;font:12px/1.55 Consolas,monospace}
+.custom-card-ui .cc-import-json-label textarea:focus{outline:2px solid #b788c0;outline-offset:1px}
+.custom-card-ui .cc-import-upload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.custom-card-ui #cc-import-upload{border:1px solid #e3d8e9}
+.custom-card-ui #cc-import-file-status{font-size:11px;color:#97849f;overflow-wrap:anywhere}
+.custom-card-ui .cc-import-summary{font-size:12px;color:#775d84;margin-bottom:14px}
+.custom-card-ui .cc-import-search input{width:100%;min-height:38px;padding:8px 11px;border:1px solid #ddd1e4;border-radius:4px;background:white;color:#584264}
+.custom-card-ui .cc-import-search input:focus{outline:2px solid #b788c0;outline-offset:1px}
+.custom-card-ui .cc-import-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.9fr);gap:16px;margin-top:14px;min-height:210px}
+.custom-card-ui #cc-import-confirmed[data-single=true] .cc-import-search,.custom-card-ui #cc-import-confirmed[data-single=true] .cc-import-results{display:none}
+.custom-card-ui #cc-import-confirmed[data-single=true] .cc-import-layout{display:block;min-height:0;margin-top:0}
+.custom-card-ui .cc-import-results{max-height:300px;overflow:auto;border:1px solid #eae2ef;border-radius:4px}
+.custom-card-ui .cc-import-results>p{font-size:12px;color:#95829f;padding:16px;margin:0}
+.custom-card-ui .cc-import-results button{display:block;width:100%;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid #f1ebf3;background:white;color:#5f4b6b;cursor:pointer}
+.custom-card-ui .cc-import-results button:hover,.custom-card-ui .cc-import-results button[aria-pressed=true]{background:#f5edf8}
+.custom-card-ui .cc-import-results button:focus-visible{outline:2px solid #9b65ad;outline-offset:-2px}
+.custom-card-ui .cc-import-results button strong{display:block;font-size:12px;font-weight:550;line-height:1.4}
+.custom-card-ui .cc-import-results button span{display:block;font-size:10px;color:#a18bac;margin-top:3px}
+.custom-card-ui .cc-import-preview{padding:15px;border:1px solid #eae2ef;border-radius:4px;background:#faf7fb;font-size:12px;line-height:1.7;color:#8f7b98;overflow-wrap:anywhere}
+.custom-card-ui .cc-import-preview h3{font-size:15px;color:#665071;margin:0 0 3px}
+.custom-card-ui .cc-import-identity{color:#8f7b98}
+.custom-card-ui .cc-import-match{display:inline-block;margin-top:12px;padding:4px 9px;border-radius:3px;background:#eaf5ed;color:#417951;font-size:11px;font-weight:550}
+.custom-card-ui .cc-import-match[data-matched=false]{background:#fff1ec;color:#ac6043}
+.custom-card-ui .cc-import-preview dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:12px 0 0}
+.custom-card-ui .cc-import-preview dt{color:#a18bab}.custom-card-ui .cc-import-preview dd{margin:0;color:#665071}
+.custom-card-ui .cc-import-preview .cc-import-warning{color:#a05f74;margin-top:12px}
+.custom-card-ui .cc-import-status{font-size:11px;color:#877192;margin:11px 0 0}
+.custom-card-ui .cc-import-status:empty{display:none}
+.custom-card-ui .cc-import-status[data-error=true]{color:#a32f55}
+.custom-card-ui #cc-import-save:disabled,.custom-card-ui #cc-import-parse:disabled{opacity:.5;cursor:not-allowed}
+.custom-card-ui .cc-source-quick-skill{white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto;padding:9px 11px;background:#faf7fb;border-left:2px solid #c5a6cf}
+@media(max-width:760px){.custom-card-ui .cc-intro-actions{width:100%;justify-content:flex-start}.custom-card-ui .cc-import-body{padding:16px}.custom-card-ui .cc-import-layout{grid-template-columns:1fr;gap:12px}.custom-card-ui .cc-import-results{max-height:180px}.custom-card-ui #cc-import-dialog .dialog-footer{align-items:flex-end}.custom-card-ui #cc-import-dialog .dialog-footer>p{max-width:155px}}

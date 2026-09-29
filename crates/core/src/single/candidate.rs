@@ -80,6 +80,7 @@ pub(crate) fn pruned_card_indices(
         SingleCardRole::FullSkill,
         None,
         None,
+        false,
     )
 }
 
@@ -92,6 +93,7 @@ pub(crate) fn pruned_card_indices_for_role(
     role: SingleCardRole,
     replacement_values: Option<&[u64]>,
     point_bonus_fixed_score_equivalent: Option<f64>,
+    preserve_stat: bool,
 ) -> Result<Vec<usize>, team::TeamBuildError> {
     // Filler deliberately bypasses every skill field. Cooperative captains use
     // `pruned_cooperative_captain_indices`, which supplies the four external skills.
@@ -112,6 +114,7 @@ pub(crate) fn pruned_card_indices_for_role(
         mode,
         replacement_values,
         point_bonus_fixed_score_equivalent,
+        preserve_stat,
     )
 }
 
@@ -126,6 +129,7 @@ pub(crate) fn pruned_cooperative_captain_indices(
     teammate_effective_stat: f64,
     replacement_values: Option<&[u64]>,
     point_bonus_fixed_score_equivalent: Option<f64>,
+    preserve_stat: bool,
 ) -> Result<(Vec<usize>, crate::team_prune::MedleyPruneTrace), team::TeamBuildError> {
     dominance::contribution_pruned_captain_indices(
         cards,
@@ -137,6 +141,7 @@ pub(crate) fn pruned_cooperative_captain_indices(
         teammate_effective_stat,
         replacement_values,
         point_bonus_fixed_score_equivalent,
+        preserve_stat,
     )
 }
 
